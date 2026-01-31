@@ -1,0 +1,50 @@
+{
+  "name": "substretcher",
+  "version": "0.1.0",
+  "description": "Standalone browser automation tool for subscription billing extraction and auto-cancel",
+  "type": "module",
+  "main": "dist/cli/index.js",
+  "bin": {
+    "substretcher": "./dist/cli/index.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsx src/cli/index.ts",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "lint": "eslint src/**/*.ts",
+    "clean": "rm -rf dist"
+  },
+  "keywords": [
+    "subscription",
+    "billing",
+    "automation",
+    "browser",
+    "chrome-devtools"
+  ],
+  "author": "",
+  "license": "MIT",
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.72.1",
+    "chalk": "^5.6.2",
+    "chrome-remote-interface": "^0.33.3",
+    "cli-table3": "^0.6.5",
+    "commander": "^14.0.3",
+    "ora": "^9.1.0",
+    "uuid": "^13.0.0",
+    "yaml": "^2.8.2",
+    "zod": "^4.3.6"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.39.2",
+    "@types/node": "^25.1.0",
+    "eslint": "^9.39.2",
+    "tsx": "^4.21.0",
+    "typescript": "^5.9.3",
+    "typescript-eslint": "^8.54.0",
+    "vitest": "^4.0.18"
+  }
+}

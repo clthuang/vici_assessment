@@ -1,0 +1,37 @@
+id: youtube
+name: YouTube Premium
+domain: youtube.com
+billingUrl: https://www.youtube.com/paid_memberships
+
+navigation:
+  steps:
+    - description: "Click profile avatar"
+      selector: "#avatar-btn"
+    - description: "Click Purchases and memberships"
+      selector: "a[href*='paid_memberships']"
+      waitAfter: 2000
+
+extraction:
+  status:
+    selector: ".membership-status"
+  renewalDate:
+    selector: ".next-billing-date"
+  cost:
+    selector: ".membership-price"
+
+cancellation:
+  enabled: true
+  steps:
+    - action: click
+      description: "Click Manage membership"
+      selector: "button[aria-label='Manage membership']"
+      waitAfter: 1500
+    - action: click
+      description: "Click Deactivate"
+      selector: "button[aria-label='Deactivate']"
+      requiresConfirmation: true
+    - action: click
+      description: "Confirm deactivation"
+      selector: "button[aria-label='Continue to cancel']"
+  successIndicator:
+    text: "Your membership has been cancelled"
