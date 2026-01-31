@@ -17,7 +17,13 @@
       "completed": "2026-01-31T22:15:00.000Z",
       "iterations": 1,
       "reviewerNotes": []
+    },
+    "design": {
+      "started": "2026-01-31T22:30:00.000Z",
+      "completed": "2026-01-31T22:45:00.000Z",
+      "iterations": 1,
+      "reviewerNotes": []
     }
   },
-  "currentPhase": "specify"
+  "currentPhase": "design"
 }
