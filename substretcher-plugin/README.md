@@ -18,6 +18,27 @@ A CLI tool for extracting subscription billing information and automating cancel
 
 ## Installation
 
+### Quick Install (Recommended)
+
+Run the interactive installation script:
+
+```bash
+cd substretcher-plugin
+./install.sh
+```
+
+The script will:
+- Check prerequisites (Node.js 18+, pnpm)
+- Install dependencies and build the project
+- Optionally link the global `substretcher` command
+- Create data directories (`~/.substretcher/`)
+- Help configure your API key
+- Create a Chrome helper script
+
+Use `./install.sh --yes` for non-interactive mode with default options.
+
+### Manual Installation
+
 ```bash
 # Clone and install
 cd substretcher-plugin
@@ -42,6 +63,8 @@ google-chrome --remote-debugging-port=9222
 # Windows
 "C:\Program Files\Google\Chrome\Application\chrome.exe" --remote-debugging-port=9222
 ```
+
+> **Note:** The default debug port is 9222. You can use a different port if needed—SubStretcher will attempt to connect to port 9222 by default.
 
 ### 2. Set API Key
 
@@ -136,7 +159,7 @@ Built-in configurations are provided for:
 
 ### Custom Service Configuration
 
-Create a YAML file in `~/.substretcher/services/` or the `services/` directory:
+Create a YAML file (`.yaml` or `.yml`) in `~/.substretcher/services/` or the `services/` directory:
 
 ```yaml
 id: example-service
@@ -193,14 +216,18 @@ cancellation:
         "cycle": "monthly"
       },
       "paymentMethod": "Visa ****1234",
-      "confidence": 0.95
+      "confidence": 0.95,
+      "extractedAt": "2024-01-15T10:30:05Z",
+      "errors": []
     }
   ],
   "summary": {
     "total": 4,
     "successful": 4,
     "failed": 0,
-    "totalMonthlyCost": 45.97
+    "skipped": 0,
+    "totalMonthlyCost": 45.97,
+    "currency": "USD"
   }
 }
 ```
@@ -208,9 +235,19 @@ cancellation:
 ### CSV Export
 
 ```csv
-serviceId,serviceName,status,renewalDate,amount,currency,cycle,paymentMethod,confidence
-netflix,Netflix,active,2024-02-15,15.99,USD,monthly,Visa ****1234,0.95
+serviceId,serviceName,status,renewalDate,amount,currency,cycle,paymentMethod,confidence,extractedAt
+netflix,Netflix,active,2024-02-15,15.99,USD,monthly,Visa ****1234,0.95,2024-01-15T10:30:05Z
 ```
+
+### Confidence Score
+
+The `confidence` field (0-1) indicates how certain the AI is about the extracted data:
+
+| Range | Level | Recommendation |
+|-------|-------|----------------|
+| 0.9–1.0 | High | Data is reliable |
+| 0.7–0.9 | Medium | Review for accuracy |
+| < 0.7 | Low | Manual verification recommended |
 
 ## Data Storage
 
@@ -219,7 +256,7 @@ SubStretcher stores data in `~/.substretcher/`:
 | File | Purpose |
 |------|---------|
 | `audit.log` | Cancellation audit trail (JSONL) |
-| `resume.json` | Resume state for interrupted scans |
+| `resume-state.json` | Resume state for interrupted scans |
 | `services/` | Custom service configurations |
 
 ## Troubleshooting
@@ -246,6 +283,22 @@ Error: ANTHROPIC_API_KEY environment variable not set
 ```
 
 **Solution:** `export ANTHROPIC_API_KEY=sk-ant-...`
+
+### Resume Interrupted Scans
+
+When a scan is interrupted (e.g., by Ctrl+C or an error), SubStretcher automatically saves progress:
+
+- Progress is stored in `~/.substretcher/resume.json`
+- Running the same scan again skips already-completed services
+- Use `--fresh` to ignore saved state and start over
+
+```bash
+# Resume interrupted scan
+substretcher scan --all
+
+# Start fresh, ignoring previous progress
+substretcher scan --all --fresh
+```
 
 ## Security Notes
 
