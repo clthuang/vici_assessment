@@ -1,9 +1,9 @@
 # Specification: SubStretcher Plugin
 
 **Feature ID:** substretcher-plugin
-**Version:** 1.0
+**Version:** 1.1
 **Date:** 2026-01-31
-**Status:** Draft
+**Status:** Reviewed
 
 ---
 
@@ -194,6 +194,22 @@ interface BillingInfo {
 ### 4.2 Service Config
 
 ```typescript
+interface NavigationStep {
+  description: string;      // Human-readable description for AI fallback
+  selector?: string;        // CSS selector (optional - AI can find element)
+  action?: 'click' | 'hover' | 'wait';  // Default: 'click'
+  waitAfter?: number;       // ms to wait after action (default: 1000)
+}
+
+interface CancellationStep {
+  action: 'click' | 'type' | 'select' | 'wait';
+  description: string;      // Human-readable for AI guidance
+  selector?: string;        // CSS selector (optional)
+  value?: string;           // For 'type' or 'select' actions
+  waitAfter?: number;       // ms to wait after action
+  requiresConfirmation?: boolean;  // Pause and ask user before this step
+}
+
 interface ServiceConfig {
   id: string;
   name: string;
@@ -234,6 +250,52 @@ interface ScanResult {
   };
 }
 ```
+
+### 4.4 Audit Log Entry
+
+```typescript
+interface AuditLogEntry {
+  timestamp: string;         // ISO 8601 timestamp
+  action: 'scan_start' | 'scan_complete' | 'cancel_start' | 'cancel_step' | 'cancel_complete' | 'cancel_failed' | 'login_prompt' | 'user_skip';
+  serviceId: string;
+  details: string;           // Human-readable description (no sensitive data)
+  success: boolean;
+  metadata?: Record<string, string>;  // Additional context (e.g., step number)
+}
+
+// Audit log stored at: ~/.substretcher/audit.log (JSONL format, one entry per line)
+```
+
+### 4.5 Resume State
+
+```typescript
+interface ResumeState {
+  scanId: string;            // UUID for this scan session
+  startedAt: string;         // ISO 8601 timestamp
+  services: string[];        // Services requested
+  completed: string[];       // Services already processed
+  results: BillingInfo[];    // Partial results collected
+  lastUpdated: string;       // ISO 8601 timestamp
+}
+
+// Resume state stored at: ~/.substretcher/resume-state.json
+// Cleared on successful scan completion or explicit --fresh flag
+```
+
+### 4.6 CSV Export Format
+
+```
+serviceId,serviceName,status,renewalDate,amount,currency,cycle,paymentMethod,confidence,extractedAt
+netflix,Netflix,active,2026-02-15,15.99,USD,monthly,Visa ****1234,0.95,2026-01-31T22:00:00Z
+spotify,Spotify,active,2026-02-01,9.99,USD,monthly,Mastercard ****5678,0.92,2026-01-31T22:01:00Z
+```
+
+Field mapping from BillingInfo:
+- `cost.amount` → `amount`
+- `cost.currency` → `currency`
+- `cost.cycle` → `cycle`
+- Null values exported as empty strings
+- `errors` array omitted from CSV (available in JSON export only)
 
 ---
 
@@ -380,3 +442,4 @@ interface ScanResult {
 | Version | Date | Author | Changes |
 |---------|------|--------|---------|
 | 1.0 | 2026-01-31 | Claude | Initial specification |
+| 1.1 | 2026-01-31 | Claude | Added NavigationStep, CancellationStep types; Audit log schema; Resume state format; CSV export mapping |
