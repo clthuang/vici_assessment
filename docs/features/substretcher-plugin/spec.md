@@ -89,6 +89,7 @@ Commands:
   status    Show connection status to Chrome
 
 Options:
+  --all                  Scan all configured services
   --output, -o <file>    Export results to file (JSON/CSV)
   --confirm              Skip confirmation prompts (for cancel)
   --verbose, -v          Show detailed progress
@@ -254,6 +255,7 @@ interface ScanResult {
 - [ ] Shows progress for each service
 - [ ] Summarizes total monthly cost at end
 - [ ] Continues to next service if one fails
+- [ ] Supports `--all` flag to scan all configured services
 
 ### AC-4: JSON Export
 - [ ] `substretcher scan --all -o subs.json` creates valid JSON file
@@ -283,6 +285,11 @@ interface ScanResult {
 - [ ] Page not found shows "Could not navigate to billing page"
 - [ ] AI extraction failure returns partial data with confidence < 0.5
 - [ ] All errors logged to stderr, not stdout
+
+### AC-9: Resume Capability
+- [ ] Multi-service scan can be interrupted and resumed
+- [ ] Previously completed services are skipped on resume
+- [ ] Partial results are preserved between runs
 
 ---
 

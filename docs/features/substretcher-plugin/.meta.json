@@ -3,7 +3,9 @@
   "name": "SubStretcher Plugin",
   "description": "Standalone browser automation tool for subscription billing extraction and auto-cancel",
   "createdAt": "2026-01-31T22:00:00.000Z",
-  "branch": null,
+  "branch": "feature/substretcher-plugin",
+  "mode": "full",
+  "brainstorm_source": "docs/features/substretcher-plugin/brainstorm.md",
   "phases": {
     "brainstorm": {
       "started": "2026-01-31T21:55:00.000Z",
@@ -11,8 +13,11 @@
       "iterations": 1
     },
     "specify": {
-      "started": "2026-01-31T22:05:00.000Z"
+      "started": "2026-01-31T22:05:00.000Z",
+      "completed": "2026-01-31T22:15:00.000Z",
+      "iterations": 1,
+      "reviewerNotes": []
     }
   },
-  "currentPhase": "brainstorm"
+  "currentPhase": "specify"
 }
