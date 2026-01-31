@@ -51,32 +51,40 @@ substretcher-plugin/
 │   ├── ai/                 # AI extraction (Claude Vision)
 │   │   ├── AIExtractor.ts      # Interface
 │   │   ├── ClaudeAIExtractor.ts # Implementation
-│   │   └── prompts.ts          # Prompt templates
+│   │   ├── prompts.ts          # Prompt templates
+│   │   └── index.ts            # Barrel export
 │   ├── browser/            # Browser automation (CDP)
 │   │   ├── BrowserAdapter.ts   # Interface
 │   │   ├── ChromeDevToolsAdapter.ts # Implementation
-│   │   └── errors.ts           # Custom errors
+│   │   ├── errors.ts           # Custom errors
+│   │   └── index.ts            # Barrel export
 │   ├── cli/                # Command-line interface
 │   │   ├── commands/           # Command handlers
+│   │   │   └── index.ts        # Barrel export
 │   │   ├── output/             # Formatters
+│   │   │   └── index.ts        # Barrel export
 │   │   └── index.ts            # Entry point
 │   ├── config/             # Configuration loading
 │   │   ├── ConfigLoader.ts     # Interface
 │   │   ├── YAMLConfigLoader.ts # Implementation
-│   │   └── schema.ts           # Zod schemas
+│   │   ├── schema.ts           # Zod schemas
+│   │   └── index.ts            # Barrel export
 │   ├── infra/              # Infrastructure utilities
 │   │   ├── AuditLogger.ts      # Audit logging
 │   │   ├── ErrorHandler.ts     # Error classification
-│   │   └── FileExporter.ts     # JSON/CSV export
+│   │   ├── FileExporter.ts     # JSON/CSV export
+│   │   └── index.ts            # Barrel export
 │   ├── orchestrator/       # Business logic
 │   │   ├── ScanOrchestrator.ts
 │   │   ├── CancelOrchestrator.ts
-│   │   └── ResumeManager.ts
+│   │   ├── ResumeManager.ts
+│   │   └── index.ts            # Barrel export
 │   └── types/              # Type definitions
 │       ├── billing.ts
 │       ├── config.ts
 │       ├── errors.ts
-│       └── state.ts
+│       ├── state.ts
+│       └── index.ts            # Barrel export
 ├── services/               # Built-in service configs
 │   ├── netflix.yaml
 │   ├── spotify.yaml
@@ -88,7 +96,7 @@ substretcher-plugin/
 
 ## Adding a New Service
 
-1. Create `services/<service-id>.yaml`:
+1. Create `services/<service-id>.yaml` (or `.yml`):
 
 ```yaml
 id: new-service
@@ -213,7 +221,7 @@ ESLint is configured with TypeScript rules. Key rules:
 
 ### File Naming
 
-- `PascalCase.ts` for classes
+- `PascalCase.ts` for classes and interfaces
 - `camelCase.ts` for modules/utilities
 - `*.test.ts` for tests (co-located)
 

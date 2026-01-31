@@ -5,10 +5,10 @@ Service configurations define how SubStretcher interacts with subscription servi
 ## File Location
 
 Configurations are loaded from:
-1. `./services/*.yaml` (project directory)
-2. `~/.substretcher/services/*.yaml` (user directory)
+1. `./services/*.yaml` or `./services/*.yml` (project directory)
+2. `~/.substretcher/services/*.yaml` or `~/.substretcher/services/*.yml` (user directory)
 
-Files are named by service ID: `netflix.yaml`, `spotify.yaml`, etc.
+Files are named by service ID: `netflix.yaml`, `spotify.yml`, etc. Both `.yaml` and `.yml` extensions are supported.
 
 ## Schema
 
@@ -67,11 +67,13 @@ navigation:
 | `description` | string | Yes | Human-readable description. Used by AI when selector fails. |
 | `selector` | string | No | CSS selector. If omitted, AI finds the element. |
 | `action` | string | No | `click`, `hover`, or `wait`. Default: `click`. |
-| `waitAfter` | number | No | Milliseconds to wait after action. Default: 1000. |
+| `waitAfter` | number | No | Milliseconds to wait after action. Default: none (action completes immediately). |
 
 ### Extraction
 
 Hints for the AI extractor. These are optional—AI can extract without them.
+
+These CSS selectors are passed to the AI prompt to help it locate the relevant elements on the page. Even if the selectors don't match exactly, the AI uses them as guidance for where to look.
 
 ```yaml
 extraction:
@@ -243,7 +245,8 @@ Configurations are validated using Zod schemas. Invalid configs are skipped with
 **Validation rules:**
 - `id`, `name`, `domain` must be non-empty strings
 - `billingUrl` must be a valid URL
-- `action` must be one of: `click`, `type`, `select`, `wait`, `hover`
+- NavigationStep `action` must be one of: `click`, `hover`, `wait`
+- CancellationStep `action` must be one of: `click`, `type`, `select`, `wait` (note: `hover` is not valid for cancellation steps)
 - `waitAfter` must be a positive number if provided
 
 ## Testing Your Configuration

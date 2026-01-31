@@ -100,13 +100,17 @@ Browser automation via Chrome DevTools Protocol.
 | `errors.ts` | Browser-specific errors |
 
 **Key operations:**
-- `connect()` - Connect to Chrome debug port
-- `navigateTo(url)` - Navigate with timeout
-- `takeScreenshot()` - Capture viewport
-- `click(selector)` - Click element
+- `connect(port?)` - Connect to Chrome debug port (default: 9222)
+- `disconnect()` - Gracefully disconnect from Chrome
+- `isConnected()` - Check if currently connected
+- `navigateTo(url, timeout?)` - Navigate with timeout
+- `getCurrentUrl()` - Get current page URL
+- `takeScreenshot()` - Capture viewport as PNG
+- `click(selector)` - Click element by CSS selector
 - `clickAt(x, y)` - Click coordinates (for AI-guided clicks)
 - `type(text)` - Type into focused element
-- `waitForSelector(selector)` - Wait for element
+- `waitForSelector(selector, timeout?)` - Wait for element
+- `waitForText(text, timeout?)` - Wait for text to appear
 
 ### AI Layer (`src/ai/`)
 
@@ -119,9 +123,9 @@ AI-powered extraction using Claude Vision.
 | `prompts.ts` | Prompt templates |
 
 **Key operations:**
-- `extractBillingInfo(screenshot, serviceName)` - Extract billing data
-- `isLoggedIn(screenshot)` - Detect login walls
-- `findElement(screenshot, description)` - Locate UI elements
+- `extractBillingInfo(screenshot, config)` - Extract billing data using service config hints
+- `isLoggedIn(screenshot, serviceName)` - Detect login walls
+- `findElement(screenshot, description)` - Locate UI elements by description
 
 ### Infrastructure Layer (`src/infra/`)
 
@@ -132,6 +136,13 @@ Cross-cutting utilities.
 | `ErrorHandler` | Classify and format errors |
 | `AuditLogger` | JSONL audit trail with sanitization |
 | `FileExporter` | JSON/CSV export |
+
+**Audit actions:**
+Actions logged to audit trail (`AuditAction` type):
+- `scan_start`, `scan_complete` - Scan lifecycle
+- `cancel_start`, `cancel_step`, `cancel_complete`, `cancel_failed` - Cancellation workflow
+- `login_prompt` - User prompted to log in manually
+- `user_skip` - User chose to skip a service
 
 ### Configuration Layer (`src/config/`)
 
@@ -155,7 +166,7 @@ Shared type definitions.
 |--------|---------|
 | `billing.ts` | BillingInfo, ScanResult, CancelResult |
 | `config.ts` | ServiceConfig, NavigationStep, CancellationStep |
-| `state.ts` | ResumeState, AuditLogEntry |
+| `state.ts` | ResumeState, AuditLogEntry, AuditAction |
 | `errors.ts` | ErrorType enum, ClassifiedError |
 
 ## Data Flow
@@ -248,6 +259,7 @@ Errors are classified by `ErrorHandler`:
 | `RATE_LIMITED` | Yes | Wait and retry |
 | `CONFIG_INVALID` | No | Fix configuration |
 | `SERVICE_NOT_FOUND` | No | Check service ID |
+| `UNKNOWN` | No | Report issue with error details |
 
 ## Testing Strategy
 
