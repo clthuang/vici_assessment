@@ -29,7 +29,13 @@
       "completed": "2026-01-31T23:00:00.000Z",
       "iterations": 1,
       "reviewerNotes": []
+    },
+    "create-tasks": {
+      "started": "2026-01-31T23:05:00.000Z",
+      "completed": "2026-01-31T23:20:00.000Z",
+      "iterations": 1,
+      "reviewerNotes": []
     }
   },
-  "currentPhase": "create-plan"
+  "currentPhase": "create-tasks"
 }
