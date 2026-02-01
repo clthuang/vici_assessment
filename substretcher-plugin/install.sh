@@ -63,7 +63,9 @@ confirm() {
   fi
   read -rp "$prompt " answer
   answer="${answer:-$default}"
-  [[ "${answer,,}" == "y" || "${answer,,}" == "yes" ]]
+  # Use tr for lowercase conversion (portable across bash 3.2+ and zsh)
+  answer=$(echo "$answer" | tr '[:upper:]' '[:lower:]')
+  [[ "$answer" == "y" || "$answer" == "yes" ]]
 }
 
 # ============================================================================

@@ -10,11 +10,13 @@ A CLI tool for extracting subscription billing information and automating cancel
 - **Resume Support** - Continue interrupted scans from where you left off
 - **Export** - Save results as JSON or CSV
 
-## Prerequisites
+## System Requirements
 
-- Node.js 18+
-- Chrome browser
-- Anthropic API key
+- **Node.js** 18 or later
+- **Chrome** browser (or Chromium)
+- **Shell**: bash 3.2+ or zsh 5.0+ (macOS and Linux default shells work)
+- **Package manager**: pnpm (recommended) or npm
+- **Anthropic API key** for AI-powered extraction
 
 ## Installation
 
@@ -36,6 +38,26 @@ The script will:
 - Create a Chrome helper script
 
 Use `./install.sh --yes` for non-interactive mode with default options.
+
+### Uninstallation
+
+To cleanly remove SubStretcher:
+
+```bash
+./uninstall.sh
+```
+
+The uninstall script will interactively prompt you to remove:
+- Global `substretcher` command
+- User data directory (`~/.substretcher/`)
+- API key from shell profile
+- Build artifacts (`dist/`, `node_modules/`)
+- Chrome helper script
+
+Options:
+- `./uninstall.sh --yes` - Non-interactive mode (answers yes to all except data removal)
+- `./uninstall.sh --keep-data` - Preserve `~/.substretcher/` directory
+- `./uninstall.sh --dry-run` - Preview what would be removed without making changes
 
 ### Manual Installation
 

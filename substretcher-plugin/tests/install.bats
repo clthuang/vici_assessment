@@ -281,3 +281,27 @@ EOF
   run is_port_in_use 59999
   [[ "$status" -ne 0 ]]
 }
+
+# ============================================================================
+# Portable lowercase conversion tests (tr command)
+# ============================================================================
+
+@test "tr lowercase: converts Y to y" {
+  result=$(echo "Y" | tr '[:upper:]' '[:lower:]')
+  [[ "$result" == "y" ]]
+}
+
+@test "tr lowercase: converts YES to yes" {
+  result=$(echo "YES" | tr '[:upper:]' '[:lower:]')
+  [[ "$result" == "yes" ]]
+}
+
+@test "tr lowercase: preserves already lowercase" {
+  result=$(echo "yes" | tr '[:upper:]' '[:lower:]')
+  [[ "$result" == "yes" ]]
+}
+
+@test "tr lowercase: handles mixed case" {
+  result=$(echo "YeS" | tr '[:upper:]' '[:lower:]')
+  [[ "$result" == "yes" ]]
+}
