@@ -171,8 +171,10 @@ remove_data_dir() {
   fi
 
   echo ""
-  warn "This directory contains your custom configs and audit logs:"
-  echo "  $DATA_DIR"
+  warn "This directory contains:"
+  echo "  - Custom service configs and audit logs"
+  echo "  - Chrome profile data (cookies, history from debug sessions)"
+  echo "  Location: $DATA_DIR"
   echo ""
 
   # Default is NO for data removal (destructive action)

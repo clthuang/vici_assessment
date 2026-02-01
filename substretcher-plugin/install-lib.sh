@@ -135,8 +135,10 @@ get_os_type() {
 }
 
 # Generate Chrome launch command for the current OS
-# Usage: get_chrome_launch_command → prints the command string
+# Usage: get_chrome_launch_command [profile_dir] → prints the command string
+# If profile_dir is not specified, defaults to $HOME/.substretcher/chrome-profile
 get_chrome_launch_command() {
+  local profile_dir="${1:-\$HOME/.substretcher/chrome-profile}"
   local chrome_path
   chrome_path=$(detect_chrome_path)
 
@@ -150,10 +152,10 @@ get_chrome_launch_command() {
 
   case "$os_type" in
     macos)
-      echo "\"$chrome_path\" --remote-debugging-port=9222"
+      echo "\"$chrome_path\" --remote-debugging-port=9222 --user-data-dir=\"$profile_dir\""
       ;;
     linux)
-      echo "$chrome_path --remote-debugging-port=9222"
+      echo "$chrome_path --remote-debugging-port=9222 --user-data-dir=\"$profile_dir\""
       ;;
     *)
       echo ""
