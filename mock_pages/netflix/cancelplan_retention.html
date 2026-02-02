@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Cancel Plan - Netflix</title>
+  <link rel="stylesheet" href="assets/netflix.css">
+</head>
+<body>
+  <!-- Test Navigation -->
+  <nav class="test-nav">
+    [Mock Page] Flow:
+    <a href="login.html">Login</a> &rarr;
+    <a href="account.html">Account</a> &rarr;
+    <a href="cancelplan_survey.html">Survey</a> &rarr;
+    <a href="cancelplan_retention.html">Retention</a> &rarr;
+    <a href="cancelplan_confirm.html">Confirm</a> &rarr;
+    <a href="cancelplan_complete.html">Complete</a>
+    | <a href="account_cancelled.html">Cancelled State</a>
+    | <a href="error.html">Error</a>
+  </nav>
+
+  <!-- Header -->
+  <header class="header">
+    <a href="account.html" class="logo">NETFLIX</a>
+  </header>
+
+  <!-- Main Content -->
+  <main class="container">
+    <div style="max-width: 600px; margin: 0 auto;">
+      <h1>Before you go...</h1>
+      <p>We have a special offer just for you. Stay with Netflix and save!</p>
+
+      <!-- Special Offer Box -->
+      <div class="offer-box">
+        <h2>Stay and Save 50%</h2>
+        <p style="color: var(--netflix-light-gray);">Keep your Premium plan for</p>
+        <div class="offer-price">
+          $11.49<span>/month</span>
+        </div>
+        <p style="color: var(--netflix-light-gray);">for the next 3 months</p>
+
+        <a href="account.html" class="btn btn-primary btn-large btn-block mt-20" data-uia="accept-offer-btn">
+          Accept This Offer
+        </a>
+      </div>
+
+      <!-- What you'll lose section -->
+      <div class="card">
+        <h3>What you'll miss:</h3>
+        <ul style="list-style: none; margin-top: 16px;">
+          <li style="padding: 8px 0; border-bottom: 1px solid var(--netflix-gray);">
+            <span style="color: var(--netflix-red);">&#10005;</span>
+            Unlimited movies and TV shows
+          </li>
+          <li style="padding: 8px 0; border-bottom: 1px solid var(--netflix-gray);">
+            <span style="color: var(--netflix-red);">&#10005;</span>
+            4K Ultra HD + HDR quality
+          </li>
+          <li style="padding: 8px 0; border-bottom: 1px solid var(--netflix-gray);">
+            <span style="color: var(--netflix-red);">&#10005;</span>
+            Watch on 4 devices at the same time
+          </li>
+          <li style="padding: 8px 0; border-bottom: 1px solid var(--netflix-gray);">
+            <span style="color: var(--netflix-red);">&#10005;</span>
+            Downloads on 6 devices
+          </li>
+          <li style="padding: 8px 0;">
+            <span style="color: var(--netflix-red);">&#10005;</span>
+            Netflix spatial audio
+          </li>
+        </ul>
+      </div>
+
+      <div class="btn-group mt-40">
+        <a href="cancelplan_survey.html" class="btn btn-secondary">Go Back</a>
+        <a href="cancelplan_confirm.html" class="btn btn-outline" data-uia="continue-cancel-btn">
+          Continue to Cancel
+        </a>
+      </div>
+
+      <p class="text-center mt-20 text-gray" style="font-size: 14px;">
+        Not interested in this offer? You can still cancel below.
+      </p>
+    </div>
+  </main>
+
+  <!-- Footer -->
+  <footer class="footer">
+    <p>Questions? Call 1-844-505-2993</p>
+    <div class="mt-20">
+      <a href="#">FAQ</a>
+      <a href="#">Help Center</a>
+      <a href="#">Terms of Use</a>
+      <a href="#">Privacy</a>
+    </div>
+    <p class="mt-20">[Mock Page for Testing]</p>
+  </footer>
+</body>
+</html>

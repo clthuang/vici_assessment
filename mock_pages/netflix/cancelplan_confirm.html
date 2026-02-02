@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Confirm Cancellation - Netflix</title>
+  <link rel="stylesheet" href="assets/netflix.css">
+</head>
+<body>
+  <!-- Test Navigation -->
+  <nav class="test-nav">
+    [Mock Page] Flow:
+    <a href="login.html">Login</a> &rarr;
+    <a href="account.html">Account</a> &rarr;
+    <a href="cancelplan_survey.html">Survey</a> &rarr;
+    <a href="cancelplan_retention.html">Retention</a> &rarr;
+    <a href="cancelplan_confirm.html">Confirm</a> &rarr;
+    <a href="cancelplan_complete.html">Complete</a>
+    | <a href="account_cancelled.html">Cancelled State</a>
+    | <a href="error.html">Error</a>
+  </nav>
+
+  <!-- Header -->
+  <header class="header">
+    <a href="account.html" class="logo">NETFLIX</a>
+  </header>
+
+  <!-- Main Content -->
+  <main class="container">
+    <div style="max-width: 600px; margin: 0 auto;">
+      <h1>Ready to cancel?</h1>
+
+      <!-- Warning Box -->
+      <div class="cancel-warning">
+        <h3>You're about to lose access to Netflix</h3>
+        <p style="margin-bottom: 0;">
+          If you cancel, you'll still have access until your current billing period ends on
+          <strong style="color: var(--netflix-white);">February 15, 2026</strong>.
+        </p>
+      </div>
+
+      <!-- What happens next -->
+      <div class="card">
+        <h3>What happens when you cancel:</h3>
+        <ul style="list-style: none; margin-top: 16px;">
+          <li style="padding: 12px 0; border-bottom: 1px solid var(--netflix-gray); display: flex; gap: 12px;">
+            <span style="color: var(--netflix-light-gray);">1.</span>
+            <div>
+              <strong>Access continues until Feb 15, 2026</strong>
+              <p style="font-size: 14px; margin-bottom: 0;">You can still watch Netflix until then.</p>
+            </div>
+          </li>
+          <li style="padding: 12px 0; border-bottom: 1px solid var(--netflix-gray); display: flex; gap: 12px;">
+            <span style="color: var(--netflix-light-gray);">2.</span>
+            <div>
+              <strong>We'll save your profile for 10 months</strong>
+              <p style="font-size: 14px; margin-bottom: 0;">Your viewing history and recommendations will be here if you come back.</p>
+            </div>
+          </li>
+          <li style="padding: 12px 0; display: flex; gap: 12px;">
+            <span style="color: var(--netflix-light-gray);">3.</span>
+            <div>
+              <strong>Restart anytime</strong>
+              <p style="font-size: 14px; margin-bottom: 0;">You can rejoin Netflix whenever you want.</p>
+            </div>
+          </li>
+        </ul>
+      </div>
+
+      <!-- Current Plan Summary -->
+      <div class="card" style="background-color: var(--netflix-gray);">
+        <div style="display: flex; justify-content: space-between; align-items: center;">
+          <div>
+            <div class="membership-label">Your plan</div>
+            <div class="membership-value">Premium - $22.99/month</div>
+          </div>
+          <div style="text-align: right;">
+            <div class="membership-label">Final charge</div>
+            <div class="membership-value">January 15, 2026</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="btn-group mt-40">
+        <a href="cancelplan_retention.html" class="btn btn-secondary btn-large" data-uia="go-back-btn">
+          Go Back
+        </a>
+        <a href="cancelplan_complete.html" class="btn btn-primary btn-large" data-uia="confirm-cancel-btn">
+          Finish Cancellation
+        </a>
+      </div>
+
+      <p class="text-center mt-20 text-gray" style="font-size: 14px;">
+        Changed your mind? <a href="account.html" class="link-red">Keep my membership</a>
+      </p>
+    </div>
+  </main>
+
+  <!-- Footer -->
+  <footer class="footer">
+    <p>Questions? Call 1-844-505-2993</p>
+    <div class="mt-20">
+      <a href="#">FAQ</a>
+      <a href="#">Help Center</a>
+      <a href="#">Terms of Use</a>
+      <a href="#">Privacy</a>
+    </div>
+    <p class="mt-20">[Mock Page for Testing]</p>
+  </footer>
+</body>
+</html>
