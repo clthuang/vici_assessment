@@ -13,8 +13,10 @@ from .exceptions import (
     TransientError,
     UserAborted,
 )
+from .session import AICall, SessionLogger, StateTransition
 
 __all__ = [
+    "AICall",
     "AppConfig",
     "ConfigLoader",
     "ConfigurationError",
@@ -23,7 +25,9 @@ __all__ = [
     "NavigationError",
     "PermanentError",
     "ServiceError",
+    "SessionLogger",
     "StateDetectionError",
+    "StateTransition",
     "SubTerminatorError",
     "TransientError",
     "UserAborted",
