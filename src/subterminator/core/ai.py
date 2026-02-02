@@ -70,11 +70,6 @@ class HeuristicInterpreter:
                 State.ACCOUNT_ACTIVE, 0.85, "Cancel link found on account page"
             )
 
-        if "restart" in text_lower and "membership" in text_lower:
-            return AIInterpretation(
-                State.ACCOUNT_CANCELLED, 0.85, "Restart link found - already cancelled"
-            )
-
         # T8.5: Text detection - third-party billing
         third_party_indicators = [
             "billed through",
@@ -89,7 +84,8 @@ class HeuristicInterpreter:
                 State.THIRD_PARTY_BILLING, 0.80, "Third-party billing detected"
             )
 
-        # T8.6: Text detection - cancel flow states
+        # T8.6: Text detection - cancel flow states (check before ACCOUNT_CANCELLED)
+        # These are more specific and should take priority
         retention_phrases = [
             "before you go",
             "special offer",
@@ -121,10 +117,27 @@ class HeuristicInterpreter:
                 State.FINAL_CONFIRMATION, 0.80, "Finish button detected"
             )
 
-        complete_phrases = ["cancelled", "cancellation is complete", "membership ends"]
-        if any(phrase in text_lower for phrase in complete_phrases):
-            if "restart" not in text_lower:  # Avoid false positive
+        # Strong COMPLETE indicators take priority (explicit completion message)
+        strong_complete_phrases = ["cancellation is complete", "your cancellation is complete"]
+        if any(phrase in text_lower for phrase in strong_complete_phrases):
+            return AIInterpretation(State.COMPLETE, 0.80, "Cancellation confirmed")
+
+        # Weaker COMPLETE indicators (only if no restart membership option present)
+        weak_complete_phrases = ["cancelled", "membership ends"]
+        if any(phrase in text_lower for phrase in weak_complete_phrases):
+            # Only consider COMPLETE if there's no "restart membership" (which indicates
+            # ACCOUNT_CANCELLED state instead)
+            if not ("restart" in text_lower and "membership" in text_lower):
                 return AIInterpretation(State.COMPLETE, 0.80, "Cancellation confirmed")
+
+        # Check ACCOUNT_CANCELLED after flow states (restart with membership but
+        # not in cancellation flow context)
+        if "restart" in text_lower and "membership" in text_lower:
+            # Make sure this isn't a "restart anytime" on a confirmation page
+            if "finish cancellation" not in text_lower:
+                return AIInterpretation(
+                    State.ACCOUNT_CANCELLED, 0.85, "Restart link found - already cancelled"
+                )
 
         # T8.7: Text detection - error state
         error_phrases = ["something went wrong", "error", "try again", "unexpected"]

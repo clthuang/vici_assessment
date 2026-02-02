@@ -21,6 +21,7 @@ class MockRequestHandler(http.server.SimpleHTTPRequestHandler):
         query = parse_qs(parsed.query)
 
         # Handle variant parameter: ?variant=retention -> cancelplan_retention.html
+        variant_handled = False
         if "variant" in query:
             variant = query["variant"][0]
             # Map variant to file
@@ -35,9 +36,10 @@ class MockRequestHandler(http.server.SimpleHTTPRequestHandler):
             }
             if variant in variant_map:
                 self.path = "/" + variant_map[variant]
+                variant_handled = True
 
-        # Default: serve account.html for /account path
-        if parsed.path == "/account" or parsed.path == "/":
+        # Default: serve account.html for /account path (only if variant not handled)
+        if not variant_handled and (parsed.path == "/account" or parsed.path == "/"):
             self.path = "/account.html"
 
         super().do_GET()
