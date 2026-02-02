@@ -6,6 +6,7 @@ the SubTerminator application.
 
 from subterminator.core.ai import ClaudeInterpreter, HeuristicInterpreter
 from subterminator.core.browser import PlaywrightBrowser
+from subterminator.core.engine import CancellationEngine, with_retry
 from subterminator.core.protocols import (
     AIInterpretation,
     AIInterpreterProtocol,
@@ -20,6 +21,7 @@ __all__ = [
     "AIInterpretation",
     "AIInterpreterProtocol",
     "BrowserProtocol",
+    "CancellationEngine",
     "CancellationResult",
     "CancellationStateMachine",
     "ClaudeInterpreter",
@@ -27,4 +29,5 @@ __all__ = [
     "PlaywrightBrowser",
     "ServiceProtocol",
     "State",
+    "with_retry",
 ]
