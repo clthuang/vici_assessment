@@ -4,7 +4,7 @@ This module exports the foundational types and protocols used throughout
 the SubTerminator application.
 """
 
-from subterminator.core.ai import HeuristicInterpreter
+from subterminator.core.ai import ClaudeInterpreter, HeuristicInterpreter
 from subterminator.core.browser import PlaywrightBrowser
 from subterminator.core.protocols import (
     AIInterpretation,
@@ -22,6 +22,7 @@ __all__ = [
     "BrowserProtocol",
     "CancellationResult",
     "CancellationStateMachine",
+    "ClaudeInterpreter",
     "HeuristicInterpreter",
     "PlaywrightBrowser",
     "ServiceProtocol",
