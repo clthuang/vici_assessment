@@ -7,8 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Breaking Changes
+
+- **CLI Syntax Change**: The positional service argument is removed. The old syntax `subterminator cancel netflix` no longer works. Use `subterminator cancel --service netflix` or interactive mode with just `subterminator cancel`.
+
 ### Added
 
+- **Interactive Service Selection Menu**: Running `subterminator cancel` without arguments now displays an interactive menu for selecting a service
+- **`--service` / `-s` flag**: Bypass interactive menu by specifying service directly (e.g., `--service netflix`)
+- **`--no-input` flag**: Force non-interactive mode for scripts and CI/CD pipelines
+- **`--plain` flag**: Disable colors and animations for accessibility
+- **Service Registry**: Services are now managed through a central registry showing availability status
+- **Coming Soon Services**: Disney+, Hulu, and Spotify are listed as "coming soon" in the menu
+- **Fuzzy Suggestions**: Typos in service names now suggest the closest match (e.g., "netflixx" suggests "netflix")
+- **Environment Variables**: New variables `SUBTERMINATOR_NO_PROMPTS` and `SUBTERMINATOR_PLAIN` for controlling interactive mode and accessibility
+- **`questionary` dependency**: Added for interactive terminal prompts
 - CI/CD auto-merge pipeline for streamlined development workflow
   - Auto-creates PRs when `feature/*` or `fix/*` branches pass CI
   - Auto-merges PRs after approval (requires branch protection)

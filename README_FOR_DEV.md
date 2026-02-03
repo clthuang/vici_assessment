@@ -95,7 +95,9 @@ The CLI layer handles user interaction using the [Typer](https://typer.tiangolo.
 # Key command definition
 @app.command()
 def cancel(
-    service: str,           # "netflix"
+    service: str | None = typer.Option(None, "--service", "-s"),  # Interactive if None
+    no_input: bool = typer.Option(False, "--no-input"),           # Disable prompts
+    plain: bool = typer.Option(False, "--plain"),                 # No colors/animations
     dry_run: bool,          # --dry-run stops before final click
     target: str,            # "live" or "mock"
     headless: bool,         # --headless for CI
@@ -684,15 +686,13 @@ class SpotifyService:
 ```python
 # src/subterminator/cli/main.py
 
-from subterminator.services.spotify import SpotifyService
+from subterminator.services.registry import get_service_by_id, get_available_services
 
-SUPPORTED_SERVICES = ["netflix", "spotify"]
+# Get available services
+services = get_available_services()  # Returns list of ServiceInfo
 
-# In cancel command:
-if service.lower() == "spotify":
-    service_obj = SpotifyService(target=target)
-else:
-    service_obj = NetflixService(target=target)
+# Look up specific service
+service = get_service_by_id("netflix")  # Returns ServiceInfo or None
 ```
 
 **3. Add heuristic patterns**
@@ -933,12 +933,15 @@ if any(phrase in text_lower for phrase in new_phrases):
 | Component | Path |
 |-----------|------|
 | CLI entry | `src/subterminator/cli/main.py` |
+| Interactive prompts | `src/subterminator/cli/prompts.py` |
+| Accessibility settings | `src/subterminator/cli/accessibility.py` |
 | Engine | `src/subterminator/core/engine.py` |
 | State machine | `src/subterminator/core/states.py` |
 | Browser | `src/subterminator/core/browser.py` |
 | AI detection | `src/subterminator/core/ai.py` |
 | Protocols | `src/subterminator/core/protocols.py` |
 | Netflix service | `src/subterminator/services/netflix.py` |
+| Service registry | `src/subterminator/services/registry.py` |
 | Mock server | `src/subterminator/services/mock.py` |
 | Output formatting | `src/subterminator/cli/output.py` |
 | Config | `src/subterminator/utils/config.py` |
@@ -949,9 +952,10 @@ if any(phrase in text_lower for phrase in new_phrases):
 
 ```bash
 # Run CLI
-uv run subterminator cancel netflix
-uv run subterminator cancel netflix --dry-run
-uv run subterminator cancel netflix --target mock --verbose
+uv run subterminator cancel                                      # Interactive mode
+uv run subterminator cancel --service netflix                    # Specify service directly
+uv run subterminator cancel --service netflix --dry-run
+uv run subterminator cancel --service netflix --target mock --verbose
 
 # Tests
 uv run pytest tests/unit/ -v
