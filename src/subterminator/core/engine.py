@@ -5,7 +5,7 @@ cancellation flow using all the components built so far.
 """
 
 import asyncio
-from collections.abc import Callable
+from collections.abc import Awaitable, Callable
 from typing import TypeVar
 
 from subterminator.core.ai import HeuristicInterpreter
@@ -396,7 +396,7 @@ class CancellationEngine:
 
 
 async def with_retry(
-    operation: Callable[[], T],
+    operation: Callable[[], Awaitable[T]],
     max_retries: int = 3,
     retry_on: tuple[type[Exception], ...] = (TransientError,),
 ) -> T:

@@ -7,6 +7,7 @@ Tests cover:
 - Exit codes for various scenarios
 """
 
+import re
 from unittest.mock import MagicMock, patch
 
 from typer.testing import CliRunner
@@ -14,6 +15,12 @@ from typer.testing import CliRunner
 from subterminator.cli.main import SUPPORTED_SERVICES, app
 
 runner = CliRunner()
+
+
+def strip_ansi(text: str) -> str:
+    """Remove ANSI escape codes from text."""
+    ansi_pattern = re.compile(r"\x1b\[[0-9;]*m")
+    return ansi_pattern.sub("", text)
 
 
 class TestSupportedServices:
@@ -129,12 +136,13 @@ class TestCancelCommandOptions:
     def test_help_shows_all_options(self) -> None:
         """Help should show all available options."""
         result = runner.invoke(app, ["cancel", "--help"])
+        output = strip_ansi(result.output)
         assert result.exit_code == 0
-        assert "--dry-run" in result.output
-        assert "--target" in result.output
-        assert "--headless" in result.output
-        assert "--verbose" in result.output
-        assert "--output-dir" in result.output
+        assert "--dry-run" in output
+        assert "--target" in output
+        assert "--headless" in output
+        assert "--verbose" in output
+        assert "--output-dir" in output
 
 
 class TestVersionFlag:
