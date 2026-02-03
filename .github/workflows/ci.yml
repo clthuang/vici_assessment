@@ -157,18 +157,35 @@ jobs:
       - name: Create PR
         if: steps.check-pr.outputs.exists == 'false'
         id: create-pr
+        continue-on-error: true
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          PR_URL=$(gh pr create \
+          if PR_URL=$(gh pr create \
             --title "${{ steps.pr-content.outputs.title }}" \
             --body "${{ steps.pr-content.outputs.body }}" \
-            --base main)
-          echo "url=$PR_URL" >> $GITHUB_OUTPUT
-          echo "Created PR: $PR_URL"
+            --base main 2>&1); then
+            echo "url=$PR_URL" >> $GITHUB_OUTPUT
+            echo "created=true" >> $GITHUB_OUTPUT
+            echo "Created PR: $PR_URL"
+          else
+            echo "created=false" >> $GITHUB_OUTPUT
+            echo "error=$PR_URL" >> $GITHUB_OUTPUT
+            echo "::warning::Auto-PR creation failed: $PR_URL"
+          fi
+
+      - name: Manual PR instructions
+        if: steps.check-pr.outputs.exists == 'false' && steps.create-pr.outputs.created != 'true'
+        run: |
+          echo "::warning::Automatic PR creation failed. Please create PR manually:"
+          echo ""
+          echo "Run this command locally:"
+          echo "  gh pr create --title '${{ steps.pr-content.outputs.title }}' --base main"
+          echo ""
+          echo "Or visit: https://github.com/${{ github.repository }}/compare/main...${{ github.ref_name }}"
 
       - name: Enable auto-merge
-        if: steps.check-pr.outputs.exists == 'false'
+        if: steps.check-pr.outputs.exists == 'false' && steps.create-pr.outputs.created == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
