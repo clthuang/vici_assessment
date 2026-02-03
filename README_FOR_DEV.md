@@ -603,19 +603,33 @@ uv run subterminator cancel netflix --target mock --dry-run --verbose
 
 ### Git Workflow
 
+The repository uses an automated CI/CD pipeline that creates PRs and enables auto-merge.
+
 ```bash
 # Create feature branch
 git checkout -b feature/my-feature
 
-# Make changes, run tests
+# Make changes, run tests locally
 uv run pytest tests/unit/
 
 # Lint before commit
 uv run ruff check src/
 
-# Commit with clear message
+# Commit and push
 git commit -m "feat: add new feature"
+git push -u origin feature/my-feature
 ```
+
+**What happens automatically:**
+
+1. **CI runs** - Lint, test (85% coverage required), and build jobs execute
+2. **PR created** - If all checks pass, a PR is auto-created targeting `main`
+3. **Auto-merge enabled** - PR will merge automatically after approval
+
+**Notes:**
+- Works for `feature/*` and `fix/*` branches
+- Requires branch protection on `main` for auto-merge (GitHub Pro/Team for private repos)
+- Uses squash merge with automatic branch deletion
 
 ---
 
