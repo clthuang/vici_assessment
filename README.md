@@ -32,7 +32,7 @@ uv sync
 uv run playwright install chromium
 
 # Test with mock server (safe, no real account needed)
-uv run subterminator cancel netflix --target mock --dry-run
+uv run subterminator cancel --service netflix --target mock --dry-run
 ```
 
 ## Installation
@@ -96,37 +96,70 @@ rm -rf ./output  # Remove session artifacts
 
 ## Usage
 
-### Basic Commands
+### Interactive Mode (Default)
+
+When you run `subterminator cancel` without specifying a service, an interactive menu appears:
 
 ```bash
-# Basic usage (live Netflix - USE WITH CAUTION)
-subterminator cancel netflix
+# Interactive service selection
+subterminator cancel
+
+# Output:
+# ? Select a service to cancel:
+# ❯ Netflix - Video streaming service
+#   Disney+ - Coming soon
+#   Hulu - Coming soon
+#   Spotify - Coming soon
+#   ──────────────
+#   Help - Show detailed service information
+```
+
+### Non-Interactive Mode
+
+Use the `--service` flag to bypass the interactive menu:
+
+```bash
+# Specify service directly (live Netflix - USE WITH CAUTION)
+subterminator cancel --service netflix
 
 # Dry-run mode (stops at final confirmation)
-subterminator cancel netflix --dry-run
+subterminator cancel --service netflix --dry-run
 
 # Test against mock server
-subterminator cancel netflix --target mock
+subterminator cancel --service netflix --target mock
 
 # Verbose output
-subterminator cancel netflix --verbose
+subterminator cancel --service netflix --verbose
 
 # Custom output directory
-subterminator cancel netflix --output-dir ./my_sessions
+subterminator cancel --service netflix --output-dir ./my_sessions
 
 # Headless mode (no browser window)
-subterminator cancel netflix --headless
+subterminator cancel --service netflix --headless
+```
+
+### Accessibility Options
+
+```bash
+# Plain mode (no colors or animations)
+subterminator cancel --plain
+
+# Force non-interactive mode (for scripts/CI)
+subterminator cancel --service netflix --no-input
 ```
 
 ### Command Options
 
 | Option | Short | Description |
 |--------|-------|-------------|
+| `--service` | `-s` | Service to cancel (bypasses interactive menu) |
 | `--dry-run` | `-n` | Run without making actual changes (stops at final confirmation) |
 | `--target` | `-t` | Target environment: `live` for real site, `mock` for local testing |
 | `--headless` | | Run browser in headless mode (no visible window) |
 | `--verbose` | `-V` | Show detailed progress information |
 | `--output-dir` | `-o` | Directory for session artifacts (screenshots, logs) |
+| `--no-input` | | Force non-interactive mode (requires `--service`) |
+| `--plain` | | Disable colors and animations |
 | `--version` | `-v` | Show version and exit |
 
 ### Exit Codes
@@ -149,6 +182,10 @@ SubTerminator can be configured via environment variables:
 | `SUBTERMINATOR_OUTPUT` | Output directory for session artifacts | `./output` |
 | `SUBTERMINATOR_PAGE_TIMEOUT` | Page load timeout (ms) | `30000` |
 | `SUBTERMINATOR_ELEMENT_TIMEOUT` | Element wait timeout (ms) | `10000` |
+| `SUBTERMINATOR_NO_PROMPTS` | Disable interactive prompts | (not set) |
+| `SUBTERMINATOR_PLAIN` | Disable colors and animations | (not set) |
+| `NO_COLOR` | Standard: disable colors (any value) | (not set) |
+| `CI` | Detected: disable interactive prompts | (not set) |
 
 ### Example Configuration
 
@@ -159,7 +196,33 @@ export SUBTERMINATOR_OUTPUT="./cancellation_sessions"
 export SUBTERMINATOR_PAGE_TIMEOUT="60000"
 
 # Now run subterminator
+subterminator cancel --service netflix
+```
+
+## Migration from v1.x
+
+In v2.0, the CLI syntax changed from a positional argument to a `--service` flag:
+
+```bash
+# Old syntax (v1.x) - NO LONGER WORKS
 subterminator cancel netflix
+
+# New syntax (v2.0+)
+subterminator cancel --service netflix
+# Or use short form:
+subterminator cancel -s netflix
+```
+
+**Why the change?** The new interactive menu makes service selection easier and more discoverable. The `--service` flag allows you to bypass the menu when needed for scripts or automation.
+
+**CI/CD Migration:** Add `--service` to your existing commands:
+
+```bash
+# Before
+subterminator cancel netflix --dry-run
+
+# After
+subterminator cancel --service netflix --dry-run
 ```
 
 ## What to Expect
@@ -278,10 +341,14 @@ Note: AI detection is optional. The tool will use heuristic detection if no API 
 
 ## Supported Services
 
-Currently supported:
-- Netflix
+| Service | Status | Notes |
+|---------|--------|-------|
+| Netflix | ✅ Available | Full cancellation automation |
+| Disney+ | 🔜 Coming Soon | In development |
+| Hulu | 🔜 Coming Soon | Planned |
+| Spotify | 🔜 Coming Soon | Planned |
 
-More services may be added in the future.
+Run `subterminator cancel` to see all services in the interactive menu.
 
 ## Development
 
