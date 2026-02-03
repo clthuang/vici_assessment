@@ -175,7 +175,7 @@ class AIInterpreterProtocol(Protocol):
     the current state of a subscription cancellation flow.
     """
 
-    def interpret(self, screenshot: bytes) -> AIInterpretation:
+    async def interpret(self, screenshot: bytes) -> AIInterpretation:
         """Interpret a page screenshot to determine its state.
 
         Args:

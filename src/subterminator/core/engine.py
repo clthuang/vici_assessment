@@ -5,7 +5,7 @@ cancellation flow using all the components built so far.
 """
 
 import asyncio
-from collections.abc import Callable
+from collections.abc import Awaitable, Callable
 from typing import TypeVar
 
 from subterminator.core.ai import HeuristicInterpreter
@@ -15,6 +15,7 @@ from subterminator.core.protocols import (
     CancellationResult,
     State,
 )
+
 # Note: CancellationStateMachine exists in states.py for documentation and potential
 # future use for strict transition validation. Currently, the engine manages states
 # directly for simplicity. The state machine can be integrated if stricter validation
@@ -321,7 +322,9 @@ class CancellationEngine:
             self.output_callback("EXIT_SURVEY", f"Survey skipped: {e}")
         except Exception as e:
             # Log unexpected errors but don't block cancellation
-            self.output_callback("EXIT_SURVEY", f"Survey error (continuing): {type(e).__name__}: {e}")
+            self.output_callback(
+                "EXIT_SURVEY", f"Survey error (continuing): {type(e).__name__}: {e}"
+            )
 
     async def _save_html_dump_on_failure(self) -> None:
         """Save HTML dump on failure for debugging (BA-4)."""
@@ -393,7 +396,7 @@ class CancellationEngine:
 
 
 async def with_retry(
-    operation: Callable[[], T],
+    operation: Callable[[], Awaitable[T]],
     max_retries: int = 3,
     retry_on: tuple[type[Exception], ...] = (TransientError,),
 ) -> T:

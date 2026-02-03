@@ -11,6 +11,7 @@ import json
 from dataclasses import asdict, dataclass
 from datetime import datetime
 from pathlib import Path
+from typing import Any
 
 
 @dataclass
@@ -84,7 +85,7 @@ class SessionLogger:
         self.session_dir = output_dir / self.session_id
         self.session_dir.mkdir(parents=True, exist_ok=True)
 
-        self.data: dict = {
+        self.data: dict[str, Any] = {
             "session_id": self.session_id,
             "service": service,
             "target": target,
