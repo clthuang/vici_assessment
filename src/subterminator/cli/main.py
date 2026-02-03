@@ -15,15 +15,14 @@ from subterminator.services.netflix import NetflixService
 from subterminator.utils.config import ConfigLoader
 from subterminator.utils.exceptions import ConfigurationError
 from subterminator.utils.session import SessionLogger
+from subterminator.services.registry import get_service_by_id, suggest_service, get_available_services
+from subterminator.cli.prompts import is_interactive, select_service
 
 app = typer.Typer(
     name="subterminator",
     help="CLI tool for automating subscription cancellations.",
     no_args_is_help=True,
 )
-
-
-SUPPORTED_SERVICES = ["netflix"]
 
 
 def version_callback(value: bool) -> None:
@@ -48,12 +47,8 @@ def main(
     pass
 
 
-@app.command()
+@app.command(epilog="Migration note: The positional syntax 'subterminator cancel netflix' is deprecated. Use '--service netflix' instead.")
 def cancel(
-    service: str = typer.Argument(
-        ...,
-        help="Service to cancel (currently only 'netflix' supported)",
-    ),
     dry_run: bool = typer.Option(
         False,
         "--dry-run",
@@ -83,13 +78,49 @@ def cancel(
         "-o",
         help="Directory for session artifacts (screenshots, logs)",
     ),
+    service: str | None = typer.Option(
+        None,
+        "--service",
+        "-s",
+        help="Service to cancel (bypasses interactive menu)",
+    ),
+    no_input: bool = typer.Option(
+        False,
+        "--no-input",
+        help="Disable all interactive prompts",
+    ),
+    plain: bool = typer.Option(
+        False,
+        "--plain",
+        help="Disable colors and animations",
+    ),
 ) -> None:
     """Cancel a subscription service."""
-    # T15.5: Service validation
-    if service.lower() not in SUPPORTED_SERVICES:
-        print(f"\033[31mError: Unsupported service '{service}'.\033[0m")
-        print(f"Supported services: {', '.join(SUPPORTED_SERVICES)}")
-        raise typer.Exit(code=3)  # Invalid args
+    # Service resolution
+    if service:
+        service_info = get_service_by_id(service)
+        if not service_info:
+            suggestion = suggest_service(service)
+            available = [s.id for s in get_available_services()]
+            typer.echo(f"Error: Unknown service '{service}'.")
+            if suggestion:
+                typer.echo(f"Did you mean: {suggestion}?")
+            typer.echo(f"Available services: {', '.join(available)}")
+            raise typer.Exit(code=3)
+        elif not service_info.available:
+            typer.echo(f"Error: Service '{service}' is not yet available.")
+            typer.echo("This service is coming soon.")
+            raise typer.Exit(code=3)
+        selected_service = service_info.id
+    elif is_interactive(no_input):
+        selected_service = select_service(plain=plain)
+        if selected_service is None:
+            typer.echo("Cancelled.")
+            raise typer.Exit(code=2)
+    else:
+        typer.echo("Error: --service required in non-interactive mode.")
+        typer.echo("Usage: subterminator cancel --service <name>")
+        raise typer.Exit(code=3)
 
     # T15.7: ToS disclaimer
     formatter = OutputFormatter(verbose=verbose)
@@ -131,7 +162,7 @@ def cancel(
         # Create session logger
         session = SessionLogger(
             output_dir=config.output_dir,
-            service=service.lower(),
+            service=selected_service,
             target=target,
         )
 

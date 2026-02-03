@@ -1,7 +1,7 @@
 """Unit tests for CLI commands.
 
 Tests cover:
-- SUPPORTED_SERVICES contains expected services
+- Service registry contains expected services
 - cancel command exists on the Typer app
 - Invalid service shows error message
 - Exit codes for various scenarios
@@ -12,7 +12,8 @@ from unittest.mock import MagicMock, patch
 
 from typer.testing import CliRunner
 
-from subterminator.cli.main import SUPPORTED_SERVICES, app
+from subterminator.cli.main import app
+from subterminator.services.registry import get_available_services, get_service_by_id
 
 runner = CliRunner()
 
@@ -24,19 +25,23 @@ def strip_ansi(text: str) -> str:
 
 
 class TestSupportedServices:
-    """Tests for SUPPORTED_SERVICES constant."""
+    """Tests for service registry."""
 
     def test_netflix_is_supported(self) -> None:
-        """Netflix should be in the list of supported services."""
-        assert "netflix" in SUPPORTED_SERVICES
+        """Netflix should be available in the registry."""
+        service = get_service_by_id("netflix")
+        assert service is not None
+        assert service.available is True
 
-    def test_supported_services_is_list(self) -> None:
-        """SUPPORTED_SERVICES should be a list."""
-        assert isinstance(SUPPORTED_SERVICES, list)
+    def test_available_services_returns_list(self) -> None:
+        """get_available_services should return a list."""
+        services = get_available_services()
+        assert isinstance(services, list)
 
-    def test_supported_services_not_empty(self) -> None:
-        """SUPPORTED_SERVICES should not be empty."""
-        assert len(SUPPORTED_SERVICES) > 0
+    def test_available_services_not_empty(self) -> None:
+        """There should be at least one available service."""
+        services = get_available_services()
+        assert len(services) > 0
 
 
 class TestCancelCommandExists:
@@ -67,22 +72,23 @@ class TestCancelCommandValidation:
 
     def test_invalid_service_shows_error(self) -> None:
         """Invalid service name should show error and exit with code 3."""
-        result = runner.invoke(app, ["cancel", "invalid_service"])
+        result = runner.invoke(app, ["cancel", "--service", "invalid_service"])
         assert result.exit_code == 3
-        assert "unsupported service" in result.output.lower()
+        assert "unknown service" in result.output.lower()
         assert "invalid_service" in result.output
 
-    def test_invalid_service_shows_supported_services(self) -> None:
-        """Error message should list supported services."""
-        result = runner.invoke(app, ["cancel", "spotify"])
+    def test_invalid_service_shows_available_services(self) -> None:
+        """Error message should list available services."""
+        result = runner.invoke(app, ["cancel", "--service", "badservice"])
         assert result.exit_code == 3
+        assert "available services" in result.output.lower()
         assert "netflix" in result.output.lower()
 
     def test_service_name_case_insensitive(self) -> None:
         """Service name validation should be case insensitive."""
-        # Both should fail with the same error type (unsupported)
-        result_lower = runner.invoke(app, ["cancel", "badservice"])
-        result_upper = runner.invoke(app, ["cancel", "BADSERVICE"])
+        # Both should fail with the same error type (unknown)
+        result_lower = runner.invoke(app, ["cancel", "--service", "badservice"])
+        result_upper = runner.invoke(app, ["cancel", "--service", "BADSERVICE"])
         assert result_lower.exit_code == result_upper.exit_code
 
 
@@ -127,7 +133,7 @@ class TestCancelCommandOptions:
         mock_engine_instance.run = MagicMock(return_value=mock_result)
         mock_engine.return_value = mock_engine_instance
 
-        result = runner.invoke(app, ["cancel", "netflix", "--dry-run"])
+        result = runner.invoke(app, ["cancel", "--service", "netflix", "--dry-run"])
         # Should not fail on the argument itself - check no error about the option
         has_dry_run_error = "dry-run" in result.output.lower()
         has_error = "error" in result.output.lower()
@@ -143,6 +149,9 @@ class TestCancelCommandOptions:
         assert "--headless" in output
         assert "--verbose" in output
         assert "--output-dir" in output
+        assert "--service" in output
+        assert "--no-input" in output
+        assert "--plain" in output
 
 
 class TestVersionFlag:
