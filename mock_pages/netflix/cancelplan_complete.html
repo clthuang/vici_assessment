@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Cancellation Complete - Netflix</title>
+  <link rel="stylesheet" href="assets/netflix.css">
+</head>
+<body>
+  <!-- Test Navigation -->
+  <nav class="test-nav">
+    [Mock Page] Flow:
+    <a href="login.html">Login</a> &rarr;
+    <a href="account.html">Account</a> &rarr;
+    <a href="cancelplan_survey.html">Survey</a> &rarr;
+    <a href="cancelplan_retention.html">Retention</a> &rarr;
+    <a href="cancelplan_confirm.html">Confirm</a> &rarr;
+    <a href="cancelplan_complete.html">Complete</a>
+    | <a href="account_cancelled.html">Cancelled State</a>
+    | <a href="error.html">Error</a>
+  </nav>
+
+  <!-- Header -->
+  <header class="header">
+    <a href="account.html" class="logo">NETFLIX</a>
+  </header>
+
+  <!-- Main Content -->
+  <main class="container">
+    <div style="max-width: 600px; margin: 0 auto; text-align: center;">
+
+      <!-- Success Icon -->
+      <div style="font-size: 80px; margin-bottom: 20px;">
+        &#10003;
+      </div>
+
+      <h1>Your cancellation is complete</h1>
+
+      <div class="success-box">
+        <p style="color: var(--netflix-white); margin-bottom: 8px;">
+          Your membership will end on
+        </p>
+        <h2 style="color: var(--netflix-white); font-size: 28px;">February 15, 2026</h2>
+        <p style="margin-bottom: 0;">
+          You can continue watching until then.
+        </p>
+      </div>
+
+      <!-- Confirmation Details -->
+      <div class="card" style="text-align: left;">
+        <h3>Confirmation details</h3>
+        <ul style="list-style: none; margin-top: 16px;">
+          <li style="padding: 12px 0; border-bottom: 1px solid var(--netflix-gray);">
+            <span class="text-gray">Email:</span>
+            <span style="float: right;">test@example.com</span>
+          </li>
+          <li style="padding: 12px 0; border-bottom: 1px solid var(--netflix-gray);">
+            <span class="text-gray">Plan cancelled:</span>
+            <span style="float: right;">Premium</span>
+          </li>
+          <li style="padding: 12px 0; border-bottom: 1px solid var(--netflix-gray);">
+            <span class="text-gray">Cancellation date:</span>
+            <span style="float: right;">February 3, 2026</span>
+          </li>
+          <li style="padding: 12px 0;">
+            <span class="text-gray">Access until:</span>
+            <span style="float: right;">February 15, 2026</span>
+          </li>
+        </ul>
+      </div>
+
+      <!-- Restart Option -->
+      <div class="card" style="background: linear-gradient(135deg, #1F2D1F 0%, #1F3F2D 100%); border-color: #205C20;">
+        <h3 style="color: #6BFF6B;">Changed your mind?</h3>
+        <p>You can restart your membership anytime and pick up right where you left off.</p>
+        <a href="account.html" class="btn btn-primary btn-block mt-20" data-uia="restart-membership-btn">
+          Restart Membership
+        </a>
+      </div>
+
+      <div class="mt-40">
+        <a href="account_cancelled.html" class="btn btn-outline btn-large" data-uia="done-btn">
+          Done
+        </a>
+      </div>
+
+      <p class="mt-40 text-gray" style="font-size: 14px;">
+        A confirmation email has been sent to test@example.com
+      </p>
+    </div>
+  </main>
+
+  <!-- Footer -->
+  <footer class="footer">
+    <p>Questions? Call 1-844-505-2993</p>
+    <div class="mt-20">
+      <a href="#">FAQ</a>
+      <a href="#">Help Center</a>
+      <a href="#">Terms of Use</a>
+      <a href="#">Privacy</a>
+    </div>
+    <p class="mt-20">[Mock Page for Testing]</p>
+  </footer>
+</body>
+</html>
