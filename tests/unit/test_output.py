@@ -302,6 +302,66 @@ class TestOutputFormatterVerboseMode:
         assert formatter.verbose is False
 
 
+class TestOutputFormatterHumanPrompt:
+    """Tests for OutputFormatter.show_human_prompt method."""
+
+    def test_show_human_prompt_auth(self) -> None:
+        """Auth prompt should display authentication message."""
+        formatter = OutputFormatter()
+
+        with patch("sys.stdout", new_callable=StringIO) as mock_stdout:
+            with patch("builtins.input", return_value=""):
+                result = formatter.show_human_prompt(PromptType.AUTH, timeout=0)
+
+        output = mock_stdout.getvalue()
+        assert "AUTHENTICATION" in output or "log in" in output.lower()
+        assert result == ""
+
+    def test_show_human_prompt_confirm(self) -> None:
+        """Confirm prompt should display warning and return response."""
+        formatter = OutputFormatter()
+
+        with patch("sys.stdout", new_callable=StringIO) as mock_stdout:
+            with patch("builtins.input", return_value="CONFIRM"):
+                result = formatter.show_human_prompt(PromptType.CONFIRM, timeout=0)
+
+        output = mock_stdout.getvalue()
+        assert "WARNING" in output or "cancel" in output.lower()
+        assert result == "confirm"  # Should be lowercased
+
+    def test_show_human_prompt_unknown(self) -> None:
+        """Unknown prompt should display appropriate message."""
+        formatter = OutputFormatter()
+
+        with patch("sys.stdout", new_callable=StringIO) as mock_stdout:
+            with patch("builtins.input", return_value=""):
+                result = formatter.show_human_prompt(PromptType.UNKNOWN, timeout=0)
+
+        output = mock_stdout.getvalue()
+        assert "UNKNOWN" in output or "page" in output.lower()
+        assert result == ""
+
+    def test_show_human_prompt_handles_eof(self) -> None:
+        """Prompt should handle EOFError gracefully."""
+        formatter = OutputFormatter()
+
+        with patch("sys.stdout", new_callable=StringIO):
+            with patch("builtins.input", side_effect=EOFError):
+                result = formatter.show_human_prompt(PromptType.AUTH, timeout=0)
+
+        assert result == ""
+
+    def test_show_human_prompt_handles_keyboard_interrupt(self) -> None:
+        """Prompt should handle KeyboardInterrupt gracefully."""
+        formatter = OutputFormatter()
+
+        with patch("sys.stdout", new_callable=StringIO):
+            with patch("builtins.input", side_effect=KeyboardInterrupt):
+                result = formatter.show_human_prompt(PromptType.AUTH, timeout=0)
+
+        assert result == ""
+
+
 class TestModuleExports:
     """Tests for module exports from cli package."""
 
