@@ -154,3 +154,19 @@ jobs:
             --base main)
           echo "url=$PR_URL" >> $GITHUB_OUTPUT
           echo "Created PR: $PR_URL"
+
+      - name: Enable auto-merge
+        if: steps.check-pr.outputs.exists == 'false'
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if gh pr merge "${{ steps.create-pr.outputs.url }}" \
+            --auto \
+            --squash \
+            --delete-branch; then
+            echo "Auto-merge enabled - will merge after approval and checks pass"
+          else
+            echo "::warning::Auto-merge not enabled. Configure branch protection rules to enable this feature."
+            echo "See: Settings → Branches → Add rule for 'main'"
+          fi
