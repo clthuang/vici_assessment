@@ -79,13 +79,13 @@ on:
 
 jobs:
   lint:
-    # Existing - no changes
+    # Modified - migrate to uv for consistency
 
   test:
-    # Modified - add coverage enforcement
+    # Modified - migrate to Python 3.12 + uv, add coverage enforcement
 
   build:
-    # Existing - no changes
+    # Modified - migrate to uv for consistency
 
   create-pr:  # NEW JOB
     # Creates PR and enables auto-merge
@@ -94,8 +94,12 @@ jobs:
 ### 2.2 Job: test (Modified)
 
 **Changes Required:**
+- Migrate from Python 3.11 + pip to Python 3.12 + uv (aligns with local development)
 - Add `--cov-fail-under=85` to enforce coverage minimum
 - Upload coverage.xml as artifact for visibility
+- Remove codecov integration (not needed for MVP, can re-add later)
+
+**Migration Note:** The existing ci.yml uses Python 3.11 and pip. This feature migrates to Python 3.12 and uv to align with local development environment (see `.python-version` and `uv.lock`). This is intentional and improves consistency.
 
 ```yaml
 test:
@@ -191,26 +195,25 @@ create-pr:
         TITLE=$(git log -1 --pretty=format:'%s')
         echo "title=$TITLE" >> $GITHUB_OUTPUT
 
-        # Generate body with commit list
-        BODY=$(cat <<'BODY_EOF'
-        ## Changes
+        # Generate commit list first (avoid command substitution in heredoc)
+        COMMITS=$(git log origin/main..HEAD --pretty=format:'- %s')
 
-        $(git log origin/main..HEAD --pretty=format:'- %s')
-
-        ## Status
-
-        - Tests: Passed
-        - Coverage: >= 85%
-
-        ---
-        *Auto-generated PR. Review and approve to merge.*
-        BODY_EOF
-        )
-
-        # Use delimiter for multiline output
-        echo "body<<EOF" >> $GITHUB_OUTPUT
-        echo "$BODY" >> $GITHUB_OUTPUT
-        echo "EOF" >> $GITHUB_OUTPUT
+        # Build body using delimiter syntax for multiline output
+        {
+          echo "body<<EOF"
+          echo "## Changes"
+          echo ""
+          echo "$COMMITS"
+          echo ""
+          echo "## Status"
+          echo ""
+          echo "- Tests: Passed"
+          echo "- Coverage: >= 85%"
+          echo ""
+          echo "---"
+          echo "*Auto-generated PR. Review and approve to merge.*"
+          echo "EOF"
+        } >> $GITHUB_OUTPUT
 
     - name: Create PR
       if: steps.check-pr.outputs.exists == 'false'
@@ -345,16 +348,37 @@ permissions:
 | Section | Change Type | Description |
 |---------|-------------|-------------|
 | `on.push.branches` | Modify | Add `fix/*` pattern |
-| `test` job | Modify | Add coverage enforcement, uv migration |
+| `lint` job | Modify | Migrate to uv for consistency |
+| `test` job | Modify | Migrate to Python 3.12 + uv, add coverage enforcement |
+| `build` job | Modify | Migrate to uv for consistency |
 | `create-pr` job | Add | New job for PR automation |
 
-### 6.2 No Breaking Changes
+### 6.2 Python/Package Manager Migration
 
-- Existing `lint`, `build` jobs unchanged in behavior
+**Current State (ci.yml):**
+- Python 3.11
+- pip for package installation
+- `pip install -e ".[dev]"`
+- codecov integration
+
+**Target State:**
+- Python 3.12 (matches `.python-version`)
+- uv for package installation (matches local development)
+- `uv sync --all-groups`
+- Artifact upload only (codecov removed for simplicity)
+
+**Why Migrate:**
+- Consistency between local and CI environments
+- uv is faster than pip (caching, parallel downloads)
+- Project already uses uv locally (uv.lock exists)
+
+### 6.3 No Breaking Changes
+
+- Existing `lint`, `build` jobs same behavior, different tooling
 - `test` job adds enforcement but same test execution
 - New job only activates on feature/fix branches
 
-### 6.3 Rollback Plan
+### 6.4 Rollback Plan
 
 If issues arise:
 1. Remove `create-pr` job from ci.yml
@@ -428,3 +452,4 @@ git push -u origin feature/test-auto-pr
 | Version | Date | Author | Changes |
 |---------|------|--------|---------|
 | 1.0 | 2026-02-03 | Claude | Initial design from spec |
+| 1.1 | 2026-02-03 | Claude | Fixed heredoc escaping, added explicit migration notes |

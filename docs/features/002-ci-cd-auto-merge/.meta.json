@@ -21,12 +21,9 @@
     },
     "design": {
       "started": "2026-02-03T21:35:00Z",
-      "completed": "2026-02-03T21:45:00Z",
-      "iterations": 1,
-      "reviewerNotes": [
-        "Python 3.12 and uv migration should be explicit in plan",
-        "Heredoc PR body generation needs careful escaping during implementation"
-      ]
+      "completed": "2026-02-03T21:50:00Z",
+      "iterations": 2,
+      "reviewerNotes": []
     }
   },
   "currentPhase": "design"
