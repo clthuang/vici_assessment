@@ -2,11 +2,12 @@
   "id": "004",
   "slug": "interactive-service-selection",
   "mode": "full",
-  "status": "active",
+  "status": "completed",
+  "completed": "2026-02-04T02:30:00Z",
   "created": "2026-02-03T20:00:00Z",
   "branch": "feature/004-interactive-service-selection",
   "brainstorm_source": "docs/brainstorms/2026-02-03-interactive-service-selection.prd.md",
-  "currentPhase": "verify",
+  "currentPhase": "finish",
   "phases": {
     "brainstorm": {
       "started": "2026-02-03T19:30:00Z",
@@ -79,7 +80,9 @@
       }
     },
     "finish": {
-      "started": "2026-02-04T02:15:00Z"
+      "started": "2026-02-04T02:15:00Z",
+      "completed": "2026-02-04T02:30:00Z",
+      "method": "merge-to-main"
     }
   }
 }
