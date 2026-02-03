@@ -2,7 +2,6 @@
 
 from unittest.mock import MagicMock, patch
 
-import pytest
 from typer.testing import CliRunner
 
 from subterminator.cli.main import app
@@ -21,7 +20,7 @@ class TestCancelInteractiveMode:
         """Shows menu when no --service flag and TTY."""
         mock_interactive.return_value = True
         mock_select.return_value = "netflix"
-        result = runner.invoke(app, ["cancel"])
+        runner.invoke(app, ["cancel"])
         mock_select.assert_called_once()
 
     @patch("subterminator.cli.main.is_interactive")
@@ -89,7 +88,7 @@ class TestCancelFlags:
         """Passes --plain to select_service."""
         mock_interactive.return_value = True
         mock_select.return_value = "netflix"
-        result = runner.invoke(app, ["cancel", "--plain"])
+        runner.invoke(app, ["cancel", "--plain"])
         mock_select.assert_called_once_with(plain=True)
 
     @patch("subterminator.cli.main.is_interactive")

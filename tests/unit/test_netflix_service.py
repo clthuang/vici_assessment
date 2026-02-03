@@ -1,6 +1,5 @@
 """Unit tests for Netflix service implementation."""
 
-import pytest
 
 from subterminator.services.netflix import (
     NetflixService,

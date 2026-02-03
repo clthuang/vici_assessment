@@ -7,16 +7,20 @@ import typer
 
 from subterminator import __version__
 from subterminator.cli.output import OutputFormatter, PromptType
+from subterminator.cli.prompts import is_interactive, select_service
 from subterminator.core.ai import ClaudeInterpreter, HeuristicInterpreter
 from subterminator.core.browser import PlaywrightBrowser
 from subterminator.core.engine import CancellationEngine
 from subterminator.services.mock import MockServer
 from subterminator.services.netflix import NetflixService
+from subterminator.services.registry import (
+    get_available_services,
+    get_service_by_id,
+    suggest_service,
+)
 from subterminator.utils.config import ConfigLoader
 from subterminator.utils.exceptions import ConfigurationError
 from subterminator.utils.session import SessionLogger
-from subterminator.services.registry import get_service_by_id, suggest_service, get_available_services
-from subterminator.cli.prompts import is_interactive, select_service
 
 app = typer.Typer(
     name="subterminator",
@@ -47,7 +51,9 @@ def main(
     pass
 
 
-@app.command(epilog="Migration note: The positional syntax 'subterminator cancel netflix' is deprecated. Use '--service netflix' instead.")
+@app.command(
+    epilog="Note: Use 'subterminator cancel --service netflix' or interactive mode."
+)
 def cancel(
     dry_run: bool = typer.Option(
         False,

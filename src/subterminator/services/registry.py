@@ -2,7 +2,6 @@
 
 import difflib
 from dataclasses import dataclass
-from typing import Optional
 
 
 @dataclass(frozen=True)
@@ -71,7 +70,7 @@ def get_available_services() -> list[ServiceInfo]:
     return [s for s in SERVICE_REGISTRY if s.available]
 
 
-def get_service_by_id(service_id: str) -> Optional[ServiceInfo]:
+def get_service_by_id(service_id: str) -> ServiceInfo | None:
     """Get a service by its ID (case-insensitive).
 
     Args:
@@ -87,7 +86,7 @@ def get_service_by_id(service_id: str) -> Optional[ServiceInfo]:
     return None
 
 
-def suggest_service(typo: str) -> Optional[str]:
+def suggest_service(typo: str) -> str | None:
     """Suggest a service ID for a typo using fuzzy matching.
 
     Only suggests from available services.

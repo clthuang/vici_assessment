@@ -1,6 +1,5 @@
 """Unit tests for service registry module."""
 
-import pytest
 
 from subterminator.services.registry import (
     ServiceInfo,

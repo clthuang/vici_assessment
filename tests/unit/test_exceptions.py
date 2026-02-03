@@ -3,16 +3,16 @@
 import pytest
 
 from subterminator.utils.exceptions import (
+    ConfigurationError,
+    ElementNotFound,
+    HumanInterventionRequired,
+    NavigationError,
+    PermanentError,
+    ServiceError,
+    StateDetectionError,
     SubTerminatorError,
     TransientError,
-    PermanentError,
-    ConfigurationError,
-    ServiceError,
-    HumanInterventionRequired,
     UserAborted,
-    ElementNotFound,
-    NavigationError,
-    StateDetectionError,
 )
 
 
@@ -164,16 +164,16 @@ class TestModuleExports:
     def test_import_from_utils(self):
         """All exceptions should be importable from subterminator.utils."""
         from subterminator.utils import (
+            ConfigurationError,
+            ElementNotFound,
+            HumanInterventionRequired,
+            NavigationError,
+            PermanentError,
+            ServiceError,
+            StateDetectionError,
             SubTerminatorError,
             TransientError,
-            PermanentError,
-            ConfigurationError,
-            ServiceError,
-            HumanInterventionRequired,
             UserAborted,
-            ElementNotFound,
-            NavigationError,
-            StateDetectionError,
         )
         # Just verify they imported successfully
         assert SubTerminatorError is not None

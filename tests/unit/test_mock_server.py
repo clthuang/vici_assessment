@@ -10,9 +10,6 @@ Tests cover:
 import socket
 import time
 from pathlib import Path
-from unittest.mock import MagicMock, patch
-
-import pytest
 
 from subterminator.services.mock import MockServer
 

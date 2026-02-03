@@ -5,16 +5,16 @@ Fixtures include mocks for browser, AI interpreter, heuristic interpreter,
 session logger, config, services, and state machine.
 """
 
-import pytest
 from pathlib import Path
-from unittest.mock import MagicMock, AsyncMock
-from typing import AsyncGenerator
+from unittest.mock import AsyncMock, MagicMock
 
-from subterminator.core.protocols import State, AIInterpretation, BrowserProtocol
+import pytest
+
+from subterminator.core.protocols import AIInterpretation, BrowserProtocol, State
 from subterminator.core.states import CancellationStateMachine
-from subterminator.utils.session import SessionLogger
-from subterminator.utils.config import AppConfig
 from subterminator.services.netflix import NetflixService
+from subterminator.utils.config import AppConfig
+from subterminator.utils.session import SessionLogger
 
 
 @pytest.fixture

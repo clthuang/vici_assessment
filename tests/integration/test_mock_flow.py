@@ -5,10 +5,9 @@ served by the MockServer to verify end-to-end state detection.
 """
 
 import time
-
-import pytest
-import requests
 from pathlib import Path
+
+import requests
 
 from subterminator.core.ai import HeuristicInterpreter
 from subterminator.core.protocols import State
@@ -34,7 +33,9 @@ class TestHeuristicWithMockPages:
         assert result.state == State.ACCOUNT_ACTIVE
         assert result.confidence >= 0.7
 
-    def test_detect_account_cancelled(self, mock_server: MockServer, mock_pages_dir: Path):
+    def test_detect_account_cancelled(
+        self, mock_server: MockServer, mock_pages_dir: Path
+    ):
         """Test detection of cancelled account page."""
         heuristic = HeuristicInterpreter()
 
@@ -64,7 +65,9 @@ class TestHeuristicWithMockPages:
         assert result.state == State.LOGIN_REQUIRED
         assert result.confidence >= 0.9
 
-    def test_detect_retention_offer(self, mock_server: MockServer, mock_pages_dir: Path):
+    def test_detect_retention_offer(
+        self, mock_server: MockServer, mock_pages_dir: Path
+    ):
         """Test detection of retention offer page."""
         heuristic = HeuristicInterpreter()
 
@@ -94,7 +97,9 @@ class TestHeuristicWithMockPages:
         assert result.state == State.EXIT_SURVEY
         assert result.confidence >= 0.7
 
-    def test_detect_final_confirmation(self, mock_server: MockServer, mock_pages_dir: Path):
+    def test_detect_final_confirmation(
+        self, mock_server: MockServer, mock_pages_dir: Path
+    ):
         """Test detection of final confirmation page."""
         heuristic = HeuristicInterpreter()
 

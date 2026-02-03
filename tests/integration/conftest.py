@@ -1,8 +1,8 @@
 """Fixtures for integration tests."""
 
-import pytest
 from pathlib import Path
 
+import pytest
 from dotenv import load_dotenv
 
 from subterminator.services.mock import MockServer

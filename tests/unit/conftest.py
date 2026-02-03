@@ -21,14 +21,14 @@ Available fixtures from parent conftest.py:
 
 # Re-export fixtures explicitly for documentation and IDE support
 from tests.conftest import (
-    mock_browser,
-    mock_ai,
-    mock_heuristic,
-    mock_session,
     app_config,
+    mock_ai,
+    mock_browser,
+    mock_heuristic,
+    mock_pages_dir,
+    mock_session,
     netflix_service,
     state_machine,
-    mock_pages_dir,
 )
 
 __all__ = [

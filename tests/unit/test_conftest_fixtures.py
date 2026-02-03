@@ -5,15 +5,13 @@ and return expected types with proper defaults.
 """
 
 from pathlib import Path
-from unittest.mock import MagicMock, AsyncMock
+from unittest.mock import AsyncMock, MagicMock
 
-import pytest
-
-from subterminator.core.protocols import State, AIInterpretation, BrowserProtocol
+from subterminator.core.protocols import AIInterpretation, BrowserProtocol, State
 from subterminator.core.states import CancellationStateMachine
-from subterminator.utils.session import SessionLogger
-from subterminator.utils.config import AppConfig
 from subterminator.services.netflix import NetflixService
+from subterminator.utils.config import AppConfig
+from subterminator.utils.session import SessionLogger
 
 
 class TestMockBrowserFixture:
