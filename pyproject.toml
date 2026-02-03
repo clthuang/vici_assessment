@@ -1,0 +1,57 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "subterminator"
+version = "0.1.0"
+description = "CLI tool for automating subscription cancellations"
+readme = "README.md"
+requires-python = ">=3.11"
+license = {text = "MIT"}
+authors = [
+    {name = "SubTerminator Team"}
+]
+dependencies = [
+    "playwright>=1.58",
+    "playwright-stealth>=1.0",
+    "python-statemachine>=2.5",
+    "typer[all]>=0.21",
+    "anthropic>=0.40",
+    "pydantic>=2.0",
+    "requests",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=8.0",
+    "pytest-asyncio>=0.24",
+    "pytest-cov>=5.0",
+    "mypy>=1.8",
+    "ruff>=0.5",
+    "python-dotenv>=1.0.0",
+]
+
+[project.scripts]
+subterminator = "subterminator.cli.main:app"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.ruff]
+line-length = 88
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "N", "W", "UP"]
+
+[tool.mypy]
+python_version = "3.11"
+strict = true
+warn_return_any = true
+warn_unused_ignores = true
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+addopts = "-v --cov=subterminator --cov-report=term-missing"

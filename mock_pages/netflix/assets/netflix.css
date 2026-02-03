@@ -1,0 +1,388 @@
+/* Netflix Mock Pages - Basic Styling */
+/* T9.10: Minimal CSS for testing */
+
+:root {
+  --netflix-red: #E50914;
+  --netflix-red-hover: #F40612;
+  --netflix-black: #141414;
+  --netflix-dark-gray: #1F1F1F;
+  --netflix-gray: #333333;
+  --netflix-light-gray: #808080;
+  --netflix-white: #FFFFFF;
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
+  background-color: var(--netflix-black);
+  color: var(--netflix-white);
+  min-height: 100vh;
+  line-height: 1.5;
+}
+
+/* Header */
+.header {
+  background-color: var(--netflix-black);
+  padding: 20px 40px;
+  border-bottom: 1px solid var(--netflix-gray);
+}
+
+.logo {
+  color: var(--netflix-red);
+  font-size: 28px;
+  font-weight: bold;
+  text-decoration: none;
+  letter-spacing: -1px;
+}
+
+/* Main Container */
+.container {
+  max-width: 800px;
+  margin: 0 auto;
+  padding: 40px 20px;
+}
+
+.container-narrow {
+  max-width: 450px;
+  margin: 0 auto;
+  padding: 60px 20px;
+}
+
+/* Typography */
+h1 {
+  font-size: 32px;
+  font-weight: 500;
+  margin-bottom: 20px;
+}
+
+h2 {
+  font-size: 24px;
+  font-weight: 500;
+  margin-bottom: 16px;
+}
+
+h3 {
+  font-size: 18px;
+  font-weight: 500;
+  margin-bottom: 12px;
+}
+
+p {
+  color: var(--netflix-light-gray);
+  margin-bottom: 16px;
+}
+
+/* Links */
+a {
+  color: var(--netflix-white);
+  text-decoration: none;
+}
+
+a:hover {
+  text-decoration: underline;
+}
+
+.link-red {
+  color: var(--netflix-red);
+}
+
+.link-gray {
+  color: var(--netflix-light-gray);
+}
+
+/* Buttons */
+.btn {
+  display: inline-block;
+  padding: 12px 24px;
+  font-size: 16px;
+  font-weight: 500;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  text-align: center;
+  text-decoration: none;
+  transition: background-color 0.2s;
+}
+
+.btn-primary {
+  background-color: var(--netflix-red);
+  color: var(--netflix-white);
+}
+
+.btn-primary:hover {
+  background-color: var(--netflix-red-hover);
+  text-decoration: none;
+}
+
+.btn-secondary {
+  background-color: var(--netflix-gray);
+  color: var(--netflix-white);
+}
+
+.btn-secondary:hover {
+  background-color: #444444;
+  text-decoration: none;
+}
+
+.btn-outline {
+  background-color: transparent;
+  border: 1px solid var(--netflix-light-gray);
+  color: var(--netflix-white);
+}
+
+.btn-outline:hover {
+  border-color: var(--netflix-white);
+  text-decoration: none;
+}
+
+.btn-block {
+  display: block;
+  width: 100%;
+}
+
+.btn-large {
+  padding: 16px 32px;
+  font-size: 18px;
+}
+
+/* Forms */
+.form-group {
+  margin-bottom: 20px;
+}
+
+.form-label {
+  display: block;
+  margin-bottom: 8px;
+  color: var(--netflix-light-gray);
+  font-size: 14px;
+}
+
+.form-input {
+  width: 100%;
+  padding: 16px;
+  font-size: 16px;
+  background-color: var(--netflix-gray);
+  border: 1px solid var(--netflix-light-gray);
+  border-radius: 4px;
+  color: var(--netflix-white);
+}
+
+.form-input:focus {
+  outline: none;
+  border-color: var(--netflix-white);
+}
+
+.form-input::placeholder {
+  color: var(--netflix-light-gray);
+}
+
+/* Radio Buttons */
+.radio-group {
+  margin: 20px 0;
+}
+
+.radio-option {
+  display: flex;
+  align-items: center;
+  padding: 16px;
+  margin-bottom: 12px;
+  background-color: var(--netflix-dark-gray);
+  border: 1px solid var(--netflix-gray);
+  border-radius: 4px;
+  cursor: pointer;
+  transition: border-color 0.2s;
+}
+
+.radio-option:hover {
+  border-color: var(--netflix-light-gray);
+}
+
+.radio-option input[type="radio"] {
+  margin-right: 12px;
+  width: 20px;
+  height: 20px;
+  accent-color: var(--netflix-red);
+}
+
+.radio-option label {
+  cursor: pointer;
+  flex: 1;
+}
+
+/* Cards / Sections */
+.card {
+  background-color: var(--netflix-dark-gray);
+  border: 1px solid var(--netflix-gray);
+  border-radius: 4px;
+  padding: 24px;
+  margin-bottom: 20px;
+}
+
+.section {
+  padding: 24px 0;
+  border-bottom: 1px solid var(--netflix-gray);
+}
+
+.section:last-child {
+  border-bottom: none;
+}
+
+/* Account Page Specific */
+.membership-info {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  padding: 20px 0;
+  border-bottom: 1px solid var(--netflix-gray);
+}
+
+.membership-info:last-child {
+  border-bottom: none;
+}
+
+.membership-label {
+  color: var(--netflix-light-gray);
+  font-size: 14px;
+  margin-bottom: 4px;
+}
+
+.membership-value {
+  font-size: 16px;
+}
+
+.membership-actions {
+  text-align: right;
+}
+
+.membership-actions a {
+  display: block;
+  margin-bottom: 8px;
+  color: var(--netflix-light-gray);
+}
+
+.membership-actions a:hover {
+  color: var(--netflix-white);
+}
+
+/* Cancel Flow Specific */
+.cancel-warning {
+  background-color: #2D1F1F;
+  border: 1px solid #5C2020;
+  border-radius: 4px;
+  padding: 20px;
+  margin: 20px 0;
+}
+
+.cancel-warning h3 {
+  color: #FF6B6B;
+  margin-bottom: 8px;
+}
+
+/* Success Message */
+.success-box {
+  background-color: #1F2D1F;
+  border: 1px solid #205C20;
+  border-radius: 4px;
+  padding: 20px;
+  margin: 20px 0;
+  text-align: center;
+}
+
+.success-box h2 {
+  color: #6BFF6B;
+  margin-bottom: 8px;
+}
+
+/* Error Page */
+.error-box {
+  text-align: center;
+  padding: 60px 20px;
+}
+
+.error-icon {
+  font-size: 64px;
+  margin-bottom: 20px;
+}
+
+/* Offer Box */
+.offer-box {
+  background: linear-gradient(135deg, #2D1F3F 0%, #1F2D3F 100%);
+  border: 2px solid var(--netflix-red);
+  border-radius: 8px;
+  padding: 30px;
+  margin: 30px 0;
+  text-align: center;
+}
+
+.offer-box h2 {
+  color: var(--netflix-white);
+  margin-bottom: 12px;
+}
+
+.offer-price {
+  font-size: 36px;
+  font-weight: bold;
+  color: var(--netflix-red);
+  margin: 16px 0;
+}
+
+.offer-price span {
+  font-size: 18px;
+  color: var(--netflix-light-gray);
+}
+
+/* Button Group */
+.btn-group {
+  display: flex;
+  gap: 16px;
+  margin-top: 24px;
+}
+
+.btn-group .btn {
+  flex: 1;
+}
+
+/* Spacing Utilities */
+.mt-20 { margin-top: 20px; }
+.mt-40 { margin-top: 40px; }
+.mb-20 { margin-bottom: 20px; }
+.mb-40 { margin-bottom: 40px; }
+.text-center { text-align: center; }
+.text-gray { color: var(--netflix-light-gray); }
+
+/* Footer */
+.footer {
+  padding: 40px;
+  text-align: center;
+  color: var(--netflix-light-gray);
+  font-size: 14px;
+  border-top: 1px solid var(--netflix-gray);
+  margin-top: 40px;
+}
+
+.footer a {
+  color: var(--netflix-light-gray);
+  margin: 0 12px;
+}
+
+/* Navigation for testing */
+.test-nav {
+  background-color: #0a0a0a;
+  padding: 10px 20px;
+  font-size: 12px;
+  border-bottom: 1px solid #333;
+}
+
+.test-nav a {
+  color: #666;
+  margin-right: 15px;
+}
+
+.test-nav a:hover {
+  color: #999;
+}

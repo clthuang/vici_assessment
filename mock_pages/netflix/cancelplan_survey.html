@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Cancel Plan - Netflix</title>
+  <link rel="stylesheet" href="assets/netflix.css">
+</head>
+<body>
+  <!-- Test Navigation -->
+  <nav class="test-nav">
+    [Mock Page] Flow:
+    <a href="login.html">Login</a> &rarr;
+    <a href="account.html">Account</a> &rarr;
+    <a href="cancelplan_survey.html">Survey</a> &rarr;
+    <a href="cancelplan_retention.html">Retention</a> &rarr;
+    <a href="cancelplan_confirm.html">Confirm</a> &rarr;
+    <a href="cancelplan_complete.html">Complete</a>
+    | <a href="account_cancelled.html">Cancelled State</a>
+    | <a href="error.html">Error</a>
+  </nav>
+
+  <!-- Header -->
+  <header class="header">
+    <a href="account.html" class="logo">NETFLIX</a>
+  </header>
+
+  <!-- Main Content -->
+  <main class="container">
+    <div style="max-width: 600px; margin: 0 auto;">
+      <h1>Why are you leaving?</h1>
+      <p>We'd love to know why you're canceling so we can improve Netflix for everyone.</p>
+
+      <form action="cancelplan_retention.html" method="get" data-uia="cancel-survey-form">
+        <div class="radio-group">
+          <div class="radio-option">
+            <input type="radio" id="reason-cost" name="cancel_reason" value="cost" data-uia="reason-cost">
+            <label for="reason-cost">It's too expensive</label>
+          </div>
+
+          <div class="radio-option">
+            <input type="radio" id="reason-content" name="cancel_reason" value="content" data-uia="reason-content">
+            <label for="reason-content">I don't find enough content I want to watch</label>
+          </div>
+
+          <div class="radio-option">
+            <input type="radio" id="reason-switching" name="cancel_reason" value="switching" data-uia="reason-switching">
+            <label for="reason-switching">I'm switching to another service</label>
+          </div>
+
+          <div class="radio-option">
+            <input type="radio" id="reason-temporary" name="cancel_reason" value="temporary" data-uia="reason-temporary">
+            <label for="reason-temporary">I'll be back, just taking a break</label>
+          </div>
+
+          <div class="radio-option">
+            <input type="radio" id="reason-technical" name="cancel_reason" value="technical" data-uia="reason-technical">
+            <label for="reason-technical">I'm having technical issues</label>
+          </div>
+
+          <div class="radio-option">
+            <input type="radio" id="reason-time" name="cancel_reason" value="time" data-uia="reason-time">
+            <label for="reason-time">I don't have time to watch</label>
+          </div>
+
+          <div class="radio-option">
+            <input type="radio" id="reason-sharing" name="cancel_reason" value="sharing" data-uia="reason-sharing">
+            <label for="reason-sharing">I'm using someone else's account</label>
+          </div>
+
+          <div class="radio-option">
+            <input type="radio" id="reason-other" name="cancel_reason" value="other" data-uia="reason-other">
+            <label for="reason-other">Other reason</label>
+          </div>
+        </div>
+
+        <div class="btn-group">
+          <a href="account.html" class="btn btn-secondary">Go Back</a>
+          <button type="submit" class="btn btn-primary" data-uia="continue-btn">Continue</button>
+        </div>
+      </form>
+    </div>
+  </main>
+
+  <!-- Footer -->
+  <footer class="footer">
+    <p>Questions? Call 1-844-505-2993</p>
+    <div class="mt-20">
+      <a href="#">FAQ</a>
+      <a href="#">Help Center</a>
+      <a href="#">Terms of Use</a>
+      <a href="#">Privacy</a>
+    </div>
+    <p class="mt-20">[Mock Page for Testing]</p>
+  </footer>
+</body>
+</html>

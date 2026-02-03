@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Error - Netflix</title>
+  <link rel="stylesheet" href="assets/netflix.css">
+</head>
+<body>
+  <!-- Test Navigation -->
+  <nav class="test-nav">
+    [Mock Page] Flow:
+    <a href="login.html">Login</a> &rarr;
+    <a href="account.html">Account</a> &rarr;
+    <a href="cancelplan_survey.html">Survey</a> &rarr;
+    <a href="cancelplan_retention.html">Retention</a> &rarr;
+    <a href="cancelplan_confirm.html">Confirm</a> &rarr;
+    <a href="cancelplan_complete.html">Complete</a>
+    | <a href="account_cancelled.html">Cancelled State</a>
+    | <a href="error.html">Error</a>
+  </nav>
+
+  <!-- Header -->
+  <header class="header">
+    <a href="account.html" class="logo">NETFLIX</a>
+  </header>
+
+  <!-- Main Content -->
+  <main class="container">
+    <div class="error-box">
+      <!-- Error Icon -->
+      <div class="error-icon">
+        &#9888;
+      </div>
+
+      <h1>Something went wrong</h1>
+
+      <p style="font-size: 18px; max-width: 500px; margin: 20px auto;">
+        We're having trouble completing your request. Please try again in a few moments.
+      </p>
+
+      <!-- Error Details Card -->
+      <div class="card" style="max-width: 500px; margin: 30px auto; text-align: left;">
+        <h3>Error Details</h3>
+        <div style="margin-top: 16px; padding: 16px; background: var(--netflix-black); border-radius: 4px; font-family: monospace; font-size: 14px;">
+          <p style="color: var(--netflix-red); margin-bottom: 8px;">Error Code: NW-2-5</p>
+          <p style="color: var(--netflix-light-gray); margin-bottom: 0;">
+            A network connectivity issue has prevented Netflix from completing your request.
+          </p>
+        </div>
+      </div>
+
+      <!-- Action Buttons -->
+      <div class="btn-group" style="justify-content: center; max-width: 400px; margin: 30px auto;">
+        <a href="account.html" class="btn btn-primary btn-large" data-uia="try-again-btn">
+          Try Again
+        </a>
+        <a href="login.html" class="btn btn-secondary btn-large" data-uia="go-home-btn">
+          Go Home
+        </a>
+      </div>
+
+      <!-- Help Section -->
+      <div class="mt-40">
+        <h3>Still having trouble?</h3>
+        <p class="text-gray">
+          Visit our <a href="#" class="link-red">Help Center</a> or call us at 1-844-505-2993
+        </p>
+      </div>
+
+      <!-- Common Solutions -->
+      <div class="card" style="max-width: 500px; margin: 30px auto; text-align: left;">
+        <h3>Try these solutions:</h3>
+        <ul style="margin-top: 16px; padding-left: 20px;">
+          <li style="padding: 8px 0; color: var(--netflix-light-gray);">
+            Refresh the page or restart your browser
+          </li>
+          <li style="padding: 8px 0; color: var(--netflix-light-gray);">
+            Check your internet connection
+          </li>
+          <li style="padding: 8px 0; color: var(--netflix-light-gray);">
+            Clear your browser cache and cookies
+          </li>
+          <li style="padding: 8px 0; color: var(--netflix-light-gray);">
+            Disable any VPN or proxy services
+          </li>
+        </ul>
+      </div>
+    </div>
+  </main>
+
+  <!-- Footer -->
+  <footer class="footer">
+    <p>Questions? Call 1-844-505-2993</p>
+    <div class="mt-20">
+      <a href="#">FAQ</a>
+      <a href="#">Help Center</a>
+      <a href="#">Terms of Use</a>
+      <a href="#">Privacy</a>
+    </div>
+    <p class="mt-20">[Mock Page for Testing]</p>
+  </footer>
+</body>
+</html>

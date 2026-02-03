@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Account Settings - Netflix</title>
+  <link rel="stylesheet" href="assets/netflix.css">
+</head>
+<body>
+  <!-- Test Navigation -->
+  <nav class="test-nav">
+    [Mock Page] Flow:
+    <a href="login.html">Login</a> &rarr;
+    <a href="account.html">Account</a> &rarr;
+    <a href="cancelplan_survey.html">Survey</a> &rarr;
+    <a href="cancelplan_retention.html">Retention</a> &rarr;
+    <a href="cancelplan_confirm.html">Confirm</a> &rarr;
+    <a href="cancelplan_complete.html">Complete</a>
+    | <a href="account_cancelled.html">Cancelled State</a>
+    | <a href="error.html">Error</a>
+  </nav>
+
+  <!-- Header -->
+  <header class="header">
+    <a href="account.html" class="logo">NETFLIX</a>
+  </header>
+
+  <!-- Main Content -->
+  <main class="container">
+    <h1>Account</h1>
+
+    <!-- Membership & Billing Section -->
+    <section class="section">
+      <h2 class="text-gray" style="font-size: 14px; text-transform: uppercase; letter-spacing: 1px;">
+        Membership & Billing
+      </h2>
+
+      <div class="membership-info">
+        <div>
+          <div class="membership-label">Email</div>
+          <div class="membership-value">test@example.com</div>
+        </div>
+        <div class="membership-actions">
+          <a href="#">Change email</a>
+          <a href="#">Change password</a>
+        </div>
+      </div>
+
+      <div class="membership-info">
+        <div>
+          <div class="membership-label">Payment Method</div>
+          <div class="membership-value">Visa ending in 4242</div>
+          <div class="membership-label mt-20">Next billing date</div>
+          <div class="membership-value">February 15, 2026</div>
+        </div>
+        <div class="membership-actions">
+          <a href="#">Manage payment info</a>
+          <a href="#">Add backup payment method</a>
+          <a href="#">Billing details</a>
+        </div>
+      </div>
+
+      <div class="membership-info">
+        <div>
+          <div class="membership-value" style="color: var(--netflix-red);">
+            <a href="cancelplan_survey.html" data-uia="action-cancel-membership" class="link-red">
+              Cancel Membership
+            </a>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Plan Details Section -->
+    <section class="section">
+      <h2 class="text-gray" style="font-size: 14px; text-transform: uppercase; letter-spacing: 1px;">
+        Plan Details
+      </h2>
+
+      <div class="membership-info">
+        <div>
+          <div class="membership-value">
+            <strong>Premium</strong>
+            <span class="text-gray"> - 4K + HDR</span>
+          </div>
+          <div class="membership-label">$22.99/month</div>
+        </div>
+        <div class="membership-actions">
+          <a href="#">Change plan</a>
+        </div>
+      </div>
+    </section>
+
+    <!-- Profile & Parental Controls Section -->
+    <section class="section">
+      <h2 class="text-gray" style="font-size: 14px; text-transform: uppercase; letter-spacing: 1px;">
+        Profile & Parental Controls
+      </h2>
+
+      <div class="card" style="margin-top: 16px;">
+        <div style="display: flex; align-items: center; justify-content: space-between;">
+          <div style="display: flex; align-items: center; gap: 16px;">
+            <div style="width: 50px; height: 50px; background: var(--netflix-red); border-radius: 4px;"></div>
+            <div>
+              <div class="membership-value">Test User</div>
+              <div class="membership-label">All Maturity Ratings</div>
+            </div>
+          </div>
+          <a href="#">&gt;</a>
+        </div>
+      </div>
+    </section>
+
+    <!-- Security Section -->
+    <section class="section">
+      <h2 class="text-gray" style="font-size: 14px; text-transform: uppercase; letter-spacing: 1px;">
+        Security & Privacy
+      </h2>
+
+      <div class="membership-info">
+        <div>
+          <a href="#">Manage access and devices</a>
+        </div>
+      </div>
+
+      <div class="membership-info">
+        <div>
+          <a href="#">Sign out of all devices</a>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <!-- Footer -->
+  <footer class="footer">
+    <p>Questions? Call 1-844-505-2993</p>
+    <div class="mt-20">
+      <a href="#">FAQ</a>
+      <a href="#">Help Center</a>
+      <a href="#">Terms of Use</a>
+      <a href="#">Privacy</a>
+    </div>
+    <p class="mt-20">[Mock Page for Testing]</p>
+  </footer>
+</body>
+</html>
