@@ -1,0 +1,71 @@
+{
+  "id": "001",
+  "slug": "subterminator-cli",
+  "mode": "full",
+  "status": "active",
+  "created": "2026-02-03T10:30:00Z",
+  "branch": "feature/001-subterminator-cli",
+  "brainstorm_source": "docs/brainstorms/2026-02-03-subterminator-research.prd.md",
+  "currentPhase": "implement",
+  "phases": {
+    "specify": {
+      "started": "2026-02-03T10:35:00Z",
+      "completed": "2026-02-03T10:50:00Z",
+      "iterations": 1,
+      "reviewerNotes": [],
+      "verified": true
+    },
+    "design": {
+      "started": "2026-02-03T11:00:00Z",
+      "completed": "2026-02-03T11:30:00Z",
+      "iterations": 1,
+      "reviewerNotes": [],
+      "verified": true
+    },
+    "create-plan": {
+      "started": "2026-02-03T11:35:00Z",
+      "completed": "2026-02-03T12:00:00Z",
+      "iterations": 1,
+      "reviewerNotes": [],
+      "verified": true
+    },
+    "create-tasks": {
+      "started": "2026-02-03T12:15:00Z",
+      "completed": "2026-02-03T12:45:00Z",
+      "iterations": 1,
+      "reviewerNotes": [],
+      "verified": true,
+      "verificationNotes": [
+        "Added explicit dependency annotations to all 151 tasks",
+        "Added parallel work identification for each phase",
+        "Added critical path analysis diagram",
+        "Added 2-dev and 3-dev team parallelization recommendations",
+        "Added risk mitigation section with merge points",
+        "Fixed T1.1 to include 'requests' library",
+        "Noted T9.11 dependency for T11 testing"
+      ]
+    },
+    "implement": {
+      "started": "2026-02-03T13:00:00Z",
+      "completed": "2026-02-03T16:30:00Z",
+      "iterations": 1,
+      "reviewerNotes": [
+        "Code coverage at 78% (slightly below 80% target)",
+        "P20 (Day 7 real Netflix testing) skipped as stretch goal"
+      ],
+      "filesCreated": 45,
+      "testsAdded": 370,
+      "testsPassing": 373,
+      "verified": true,
+      "verificationNotes": [
+        "Fixed BA-4: Added HTML dump on failure (_save_html_dump_on_failure)",
+        "Fixed HIL-5: Browser left open on abort for manual completion",
+        "Fixed HIL-6: Added shared account warning to confirmation prompt",
+        "Fixed silent exception in _complete_survey() - now logs and continues",
+        "Fixed ClaudeInterpreter async/sync mismatch with asyncio.to_thread()",
+        "Documented unused CancellationStateMachine (kept for reference)",
+        "373 tests passing, 84% coverage"
+      ]
+    }
+  }
+}

@@ -10,6 +10,7 @@ from subterminator.cli.output import OutputFormatter, PromptType
 from subterminator.core.ai import ClaudeInterpreter, HeuristicInterpreter
 from subterminator.core.browser import PlaywrightBrowser
 from subterminator.core.engine import CancellationEngine
+from subterminator.services.mock import MockServer
 from subterminator.services.netflix import NetflixService
 from subterminator.utils.config import ConfigLoader
 from subterminator.utils.exceptions import ConfigurationError
@@ -103,6 +104,18 @@ def cancel(
         if output_dir:
             config.output_dir = output_dir
 
+        # Start mock server if using mock target
+        mock_server = None
+        if target == "mock":
+            mock_pages_dir = (
+                Path(__file__).parent.parent.parent.parent / "mock_pages" / "netflix"
+            )
+            if not mock_pages_dir.exists():
+                print(f"\033[31mError: Mock pages not found at {mock_pages_dir}\033[0m")
+                raise typer.Exit(code=4)
+            mock_server = MockServer(mock_pages_dir, port=8000)
+            mock_server.start()
+
         # Create components
         service_obj = NetflixService(target=target)
         browser = PlaywrightBrowser(headless=headless)
@@ -148,19 +161,24 @@ def cancel(
         if dry_run:
             formatter.show_dry_run_notice()
 
-        # Run the cancellation
-        result = asyncio.run(engine.run(dry_run=dry_run))
+        try:
+            # Run the cancellation
+            result = asyncio.run(engine.run(dry_run=dry_run))
 
-        # T15.6: Exit code handling
-        if result.success:
-            formatter.show_success(result)
-            raise typer.Exit(code=0)
-        elif result.state.name == "ABORTED":
-            print("\nOperation aborted.")
-            raise typer.Exit(code=2)
-        else:
-            formatter.show_failure(result)
-            raise typer.Exit(code=1)
+            # T15.6: Exit code handling
+            if result.success:
+                formatter.show_success(result)
+                raise typer.Exit(code=0)
+            elif result.state.name == "ABORTED":
+                print("\nOperation aborted.")
+                raise typer.Exit(code=2)
+            else:
+                formatter.show_failure(result)
+                raise typer.Exit(code=1)
+        finally:
+            # Stop mock server if it was started
+            if mock_server:
+                mock_server.stop()
 
     except ConfigurationError as e:
         print(f"\033[31mConfiguration error: {e}\033[0m")

@@ -15,7 +15,10 @@ from subterminator.core.protocols import (
     CancellationResult,
     State,
 )
-from subterminator.core.states import CancellationStateMachine
+# Note: CancellationStateMachine exists in states.py for documentation and potential
+# future use for strict transition validation. Currently, the engine manages states
+# directly for simplicity. The state machine can be integrated if stricter validation
+# is needed (see states.py for valid transitions).
 from subterminator.services.netflix import NetflixService
 from subterminator.utils.config import AppConfig
 from subterminator.utils.exceptions import (
@@ -95,7 +98,6 @@ class CancellationEngine:
         self.output_callback = output_callback or (lambda state, msg: None)
         self.input_callback = input_callback
 
-        self.state_machine = CancellationStateMachine()
         self.dry_run = False
         self._current_state = State.START
         self._step = 0
@@ -133,11 +135,16 @@ class CancellationEngine:
             )
 
         except UserAborted:
+            # HIL-5: Leave browser open on abort so user can complete manually
             return self._complete(False, State.ABORTED, "User aborted the operation")
         except SubTerminatorError as e:
+            # BA-4: Save HTML dump on failure for debugging
+            await self._save_html_dump_on_failure()
             return self._complete(False, State.FAILED, str(e))
         finally:
-            await self.browser.close()
+            # Only close browser if not aborted (user may want to continue manually)
+            if self._current_state != State.ABORTED:
+                await self.browser.close()
 
     async def _handle_state(self, state: State) -> State:
         """Process current state and determine next state.
@@ -297,14 +304,35 @@ class CancellationEngine:
             raise HumanInterventionRequired(f"Need human input for {checkpoint_type}")
 
     async def _complete_survey(self) -> None:
-        """Complete the exit survey by selecting first option and submitting."""
+        """Complete the exit survey by selecting first option and submitting.
+
+        Survey completion is optional - if it fails, we log and continue
+        since the cancellation can still proceed.
+        """
+        from subterminator.utils.exceptions import ElementNotFound
+
         try:
             await self.browser.click(self.service.selectors.survey_option)
             await asyncio.sleep(0.5)
             await self.browser.click(self.service.selectors.survey_submit)
             await asyncio.sleep(1)
+        except (ElementNotFound, TimeoutError) as e:
+            # Survey completion is optional, log and continue
+            self.output_callback("EXIT_SURVEY", f"Survey skipped: {e}")
+        except Exception as e:
+            # Log unexpected errors but don't block cancellation
+            self.output_callback("EXIT_SURVEY", f"Survey error (continuing): {type(e).__name__}: {e}")
+
+    async def _save_html_dump_on_failure(self) -> None:
+        """Save HTML dump on failure for debugging (BA-4)."""
+        try:
+            html_content = await self.browser.html()
+            html_path = self.session.screenshots_dir / f"{self._step:02d}_failure.html"
+            with open(html_path, "w", encoding="utf-8") as f:
+                f.write(html_content)
+            self.output_callback("FAILED", f"HTML dump saved: {html_path}")
         except Exception:
-            # If survey fails, try to continue anyway
+            # Don't fail the failure handling
             pass
 
     def _is_terminal_state(self) -> bool:

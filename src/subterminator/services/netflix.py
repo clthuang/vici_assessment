@@ -70,11 +70,20 @@ class NetflixService:
                 "login": ["Sign In", "Email", "Password", "Log In"],
                 "active": ["Cancel Membership", "Cancel Plan"],
                 "cancelled": ["Restart Membership", "Restart your membership"],
-                "third_party": ["Billed through", "iTunes", "Google Play", "T-Mobile", "App Store"],
-                "retention": ["Before you go", "Special offer", "discount", "We'd hate to see you go"],
-                "survey": ["Why are you leaving", "Reason for cancelling", "Tell us why"],
+                "third_party": [
+                    "Billed through", "iTunes", "Google Play", "T-Mobile", "App Store"
+                ],
+                "retention": [
+                    "Before you go", "Special offer", "discount",
+                    "We'd hate to see you go"
+                ],
+                "survey": [
+                    "Why are you leaving", "Reason for cancelling", "Tell us why"
+                ],
                 "confirmation": ["Finish Cancellation", "Confirm Cancellation"],
-                "complete": ["Cancelled", "Your cancellation is complete", "membership ends"],
+                "complete": [
+                    "Cancelled", "Your cancellation is complete", "membership ends"
+                ],
             }
         )
 

@@ -3,7 +3,12 @@
 import pytest
 from pathlib import Path
 
+from dotenv import load_dotenv
+
 from subterminator.services.mock import MockServer
+
+# Load .env file at test startup
+load_dotenv(Path(__file__).parent.parent.parent / ".env")
 
 
 @pytest.fixture
@@ -28,3 +33,16 @@ def mock_server(mock_pages_dir: Path):
     server.start()
     yield server
     server.stop()
+
+
+@pytest.fixture
+async def playwright_browser():
+    """Real Playwright browser for capturing screenshots."""
+    from playwright.async_api import async_playwright
+
+    playwright = await async_playwright().start()
+    browser = await playwright.chromium.launch(headless=True)
+    page = await browser.new_page()
+    yield page
+    await browser.close()
+    await playwright.stop()

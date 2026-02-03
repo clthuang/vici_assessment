@@ -118,7 +118,10 @@ class HeuristicInterpreter:
             )
 
         # Strong COMPLETE indicators take priority (explicit completion message)
-        strong_complete_phrases = ["cancellation is complete", "your cancellation is complete"]
+        strong_complete_phrases = [
+            "cancellation is complete",
+            "your cancellation is complete",
+        ]
         if any(phrase in text_lower for phrase in strong_complete_phrases):
             return AIInterpretation(State.COMPLETE, 0.80, "Cancellation confirmed")
 
@@ -136,7 +139,9 @@ class HeuristicInterpreter:
             # Make sure this isn't a "restart anytime" on a confirmation page
             if "finish cancellation" not in text_lower:
                 return AIInterpretation(
-                    State.ACCOUNT_CANCELLED, 0.85, "Restart link found - already cancelled"
+                    State.ACCOUNT_CANCELLED,
+                    0.85,
+                    "Restart link found - already cancelled",
                 )
 
         # T8.7: Text detection - error state
@@ -154,6 +159,10 @@ class ClaudeInterpreter:
     Uses Claude's vision capabilities to analyze screenshots and determine
     the current state in a subscription cancellation flow. This is used
     when heuristic-based detection fails or returns low confidence.
+
+    Note: This interpreter uses the synchronous Anthropic client wrapped in
+    asyncio.to_thread() to avoid blocking the event loop while maintaining
+    the async interface expected by the engine.
 
     Example:
         >>> interpreter = ClaudeInterpreter()
@@ -199,6 +208,25 @@ Respond in JSON format:
 
     async def interpret(self, screenshot: bytes) -> AIInterpretation:
         """Interpret page state from screenshot using Claude Vision.
+
+        Args:
+            screenshot: PNG image bytes of the page screenshot.
+
+        Returns:
+            AIInterpretation with detected state, confidence, reasoning,
+            and suggested actions.
+
+        Raises:
+            StateDetectionError: If the Claude API call fails or response
+                cannot be parsed.
+        """
+        import asyncio
+
+        # Run the synchronous API call in a thread to avoid blocking event loop
+        return await asyncio.to_thread(self._interpret_sync, screenshot)
+
+    def _interpret_sync(self, screenshot: bytes) -> AIInterpretation:
+        """Synchronous implementation of interpret.
 
         Args:
             screenshot: PNG image bytes of the page screenshot.
