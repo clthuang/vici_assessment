@@ -117,18 +117,6 @@ jobs:
             echo "exists=false" >> $GITHUB_OUTPUT
           fi
 
-      - name: Verify branch protection
-        if: steps.check-pr.outputs.exists == 'false'
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          PROTECTION=$(gh api repos/${{ github.repository }}/branches/main/protection 2>&1 || true)
-          if echo "$PROTECTION" | grep -q "Branch not protected"; then
-            echo "::error::Branch protection not configured on main. Auto-merge requires branch protection."
-            exit 1
-          fi
-          echo "Branch protection verified"
-
       - name: Generate PR content
         if: steps.check-pr.outputs.exists == 'false'
         id: pr-content
@@ -157,40 +145,12 @@ jobs:
       - name: Create PR
         if: steps.check-pr.outputs.exists == 'false'
         id: create-pr
-        continue-on-error: true
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          if PR_URL=$(gh pr create \
+          PR_URL=$(gh pr create \
             --title "${{ steps.pr-content.outputs.title }}" \
             --body "${{ steps.pr-content.outputs.body }}" \
-            --base main 2>&1); then
-            echo "url=$PR_URL" >> $GITHUB_OUTPUT
-            echo "created=true" >> $GITHUB_OUTPUT
-            echo "Created PR: $PR_URL"
-          else
-            echo "created=false" >> $GITHUB_OUTPUT
-            echo "error=$PR_URL" >> $GITHUB_OUTPUT
-            echo "::warning::Auto-PR creation failed: $PR_URL"
-          fi
-
-      - name: Manual PR instructions
-        if: steps.check-pr.outputs.exists == 'false' && steps.create-pr.outputs.created != 'true'
-        run: |
-          echo "::warning::Automatic PR creation failed. Please create PR manually:"
-          echo ""
-          echo "Run this command locally:"
-          echo "  gh pr create --title '${{ steps.pr-content.outputs.title }}' --base main"
-          echo ""
-          echo "Or visit: https://github.com/${{ github.repository }}/compare/main...${{ github.ref_name }}"
-
-      - name: Enable auto-merge
-        if: steps.check-pr.outputs.exists == 'false' && steps.create-pr.outputs.created == 'true'
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          gh pr merge "${{ steps.create-pr.outputs.url }}" \
-            --auto \
-            --squash \
-            --delete-branch
-          echo "Auto-merge enabled with squash strategy"
+            --base main)
+          echo "url=$PR_URL" >> $GITHUB_OUTPUT
+          echo "Created PR: $PR_URL"
