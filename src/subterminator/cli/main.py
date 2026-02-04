@@ -4,6 +4,7 @@ import asyncio
 from pathlib import Path
 
 import typer
+from rich.console import Console
 
 from subterminator import __version__
 from subterminator.cli.output import OutputFormatter, PromptType
@@ -11,8 +12,8 @@ from subterminator.cli.prompts import is_interactive, select_service
 from subterminator.core.ai import ClaudeInterpreter, HeuristicInterpreter
 from subterminator.core.browser import PlaywrightBrowser
 from subterminator.core.engine import CancellationEngine
+from subterminator.services import create_service, get_mock_pages_dir
 from subterminator.services.mock import MockServer
-from subterminator.services.netflix import NetflixService
 from subterminator.services.registry import (
     get_available_services,
     get_service_by_id,
@@ -21,6 +22,8 @@ from subterminator.services.registry import (
 from subterminator.utils.config import ConfigLoader
 from subterminator.utils.exceptions import ConfigurationError
 from subterminator.utils.session import SessionLogger
+
+console = Console()
 
 app = typer.Typer(
     name="subterminator",
@@ -100,8 +103,26 @@ def cancel(
         "--plain",
         help="Disable colors and animations",
     ),
+    cdp_url: str | None = typer.Option(
+        None,
+        "--cdp-url",
+        help="Connect to existing Chrome via CDP URL. Start Chrome with: "
+        "chrome --remote-debugging-port=9222",
+    ),
+    profile_dir: str | None = typer.Option(
+        None,
+        "--profile-dir",
+        help="Use persistent browser profile directory for session persistence",
+    ),
 ) -> None:
     """Cancel a subscription service."""
+    # Validate mutual exclusivity of browser options early (before browser init)
+    if cdp_url and profile_dir:
+        console.print(
+            "[red]Error:[/red] --cdp-url and --profile-dir cannot be used together"
+        )
+        raise typer.Exit(code=1)
+
     # Service resolution
     if service:
         service_info = get_service_by_id(service)
@@ -145,18 +166,24 @@ def cancel(
         # Start mock server if using mock target
         mock_server = None
         if target == "mock":
-            mock_pages_dir = (
-                Path(__file__).parent.parent.parent.parent / "mock_pages" / "netflix"
-            )
+            mock_pages_path = get_mock_pages_dir(selected_service)
+            project_root = Path(__file__).parent.parent.parent.parent
+            mock_pages_dir = project_root / mock_pages_path
             if not mock_pages_dir.exists():
-                print(f"\033[31mError: Mock pages not found at {mock_pages_dir}\033[0m")
+                console.print(
+                    f"[red]Error: Mock pages not found at {mock_pages_dir}[/red]"
+                )
                 raise typer.Exit(code=4)
             mock_server = MockServer(mock_pages_dir, port=8000)
             mock_server.start()
 
         # Create components
-        service_obj = NetflixService(target=target)
-        browser = PlaywrightBrowser(headless=headless)
+        service_obj = create_service(selected_service, target)
+        browser = PlaywrightBrowser(
+            headless=headless,
+            cdp_url=cdp_url,
+            user_data_dir=profile_dir,
+        )
         heuristic = HeuristicInterpreter()
 
         # Create AI interpreter if API key available
@@ -219,7 +246,7 @@ def cancel(
                 mock_server.stop()
 
     except ConfigurationError as e:
-        print(f"\033[31mConfiguration error: {e}\033[0m")
+        console.print(f"[red]Configuration error: {e}[/red]")
         raise typer.Exit(code=4)
 
 

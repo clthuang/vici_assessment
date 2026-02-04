@@ -45,8 +45,9 @@ The system SHALL provide clear error messages for connection failures.
 
 **Acceptance Criteria:**
 - [ ] "Cannot connect to Chrome at {url}. Is Chrome running with --remote-debugging-port?" when CDP connection fails
-- [ ] "Profile directory {path} does not exist" when invalid profile path provided
-- [ ] Connection timeout configurable (default 10 seconds)
+- [ ] Profile directory auto-created if missing (with info message)
+- [ ] "Failed to load browser profile from {path}" when profile is corrupted
+- [ ] Connection timeout configurable (default 10000ms / 10 seconds)
 
 ### 2.2 ARIA-Based Element Selection
 
@@ -60,12 +61,12 @@ The `PlaywrightBrowser.click()` method SHALL support ARIA-based fallback when CS
 - [ ] Error message includes both CSS selectors and ARIA role attempted
 
 #### FR-6: Service Selector Format Update
-Service selectors SHALL support both CSS and ARIA role definitions.
+Service selectors SHALL use `SelectorConfig` with CSS and ARIA role definitions.
 
 **Acceptance Criteria:**
-- [ ] Selector format supports dict with `css` and `role` keys
-- [ ] Backward compatible: string selectors still work (CSS only)
+- [ ] All selectors use `SelectorConfig` dataclass with `css` and `aria` fields
 - [ ] Netflix service updated with ARIA fallbacks for all selectors
+- [ ] No backward compatibility needed (pre-production codebase)
 
 ### 2.3 Service-Agnostic Architecture
 

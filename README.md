@@ -138,6 +138,22 @@ subterminator cancel --service netflix --output-dir ./my_sessions
 subterminator cancel --service netflix --headless
 ```
 
+### Browser Session Reuse
+
+Skip re-authentication by reusing an existing browser session:
+
+```bash
+# Option 1: Connect to Chrome with remote debugging enabled
+# First, start Chrome with: chrome --remote-debugging-port=9222
+subterminator cancel --service netflix --cdp-url http://localhost:9222
+
+# Option 2: Use a persistent browser profile
+# Session data (cookies, localStorage) will persist between runs
+subterminator cancel --service netflix --profile-dir ~/.subterminator/chrome-profile
+```
+
+**Note:** `--cdp-url` and `--profile-dir` cannot be used together.
+
 ### Accessibility Options
 
 ```bash
@@ -160,6 +176,8 @@ subterminator cancel --service netflix --no-input
 | `--output-dir` | `-o` | Directory for session artifacts (screenshots, logs) |
 | `--no-input` | | Force non-interactive mode (requires `--service`) |
 | `--plain` | | Disable colors and animations |
+| `--cdp-url` | | Connect to existing Chrome via CDP URL |
+| `--profile-dir` | | Use persistent browser profile directory |
 | `--version` | `-v` | Show version and exit |
 
 ### Exit Codes

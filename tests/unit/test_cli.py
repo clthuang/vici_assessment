@@ -98,14 +98,14 @@ class TestCancelCommandOptions:
     @patch("subterminator.cli.main.ConfigLoader")
     @patch("subterminator.cli.main.CancellationEngine")
     @patch("subterminator.cli.main.PlaywrightBrowser")
-    @patch("subterminator.cli.main.NetflixService")
+    @patch("subterminator.cli.main.create_service")
     @patch("subterminator.cli.main.SessionLogger")
     @patch("subterminator.cli.main.HeuristicInterpreter")
     def test_dry_run_option_accepted(
         self,
         mock_heuristic: MagicMock,
         mock_session: MagicMock,
-        mock_netflix: MagicMock,
+        mock_create_service: MagicMock,
         mock_browser: MagicMock,
         mock_engine: MagicMock,
         mock_config_loader: MagicMock,

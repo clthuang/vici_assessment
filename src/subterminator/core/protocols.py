@@ -260,11 +260,11 @@ class ServiceProtocol(Protocol):
         ...
 
     @property
-    def selectors(self) -> dict[str, str | list[str]]:
-        """Get the CSS selectors for UI elements.
+    def selectors(self) -> Any:
+        """Get the selectors for UI elements.
 
         Returns:
-            Dictionary mapping element names to CSS selectors.
-            Values can be single selectors or lists of fallback selectors.
+            Object with selector attributes (e.g., .cancel_link, .decline_offer).
+            Each attribute is a SelectorConfig with css and aria fields.
         """
         ...
