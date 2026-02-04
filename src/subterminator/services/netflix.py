@@ -108,3 +108,8 @@ class NetflixService:
     def name(self) -> str:
         """Get service name."""
         return self._config.name
+
+    @property
+    def service_id(self) -> str:
+        """Get unique service identifier."""
+        return "netflix"
