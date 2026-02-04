@@ -13,6 +13,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Browser Session Reuse**: Connect to existing Chrome browser via CDP (`--cdp-url`) or use persistent profiles (`--profile-dir`) to skip re-authentication between runs
+- **`--cdp-url` flag**: Connect to Chrome running with remote debugging enabled (`chrome --remote-debugging-port=9222`)
+- **`--profile-dir` flag**: Use persistent browser profile directory for session persistence
 - **Interactive Service Selection Menu**: Running `subterminator cancel` without arguments now displays an interactive menu for selecting a service
 - **`--service` / `-s` flag**: Bypass interactive menu by specifying service directly (e.g., `--service netflix`)
 - **`--no-input` flag**: Force non-interactive mode for scripts and CI/CD pipelines
