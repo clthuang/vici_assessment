@@ -72,7 +72,7 @@ Our current SubTerminator implementation has several limitations:
 
 | Tool | Architecture | Maturity | Suitability |
 |------|--------------|----------|-------------|
-| **OpenClaw** | Snapshot-based refs, Extension Relay | Active development, reported stability issues (see GitHub issues) | Good concepts, but stability concerns for production |
+| **OpenClaw** | Snapshot-based refs, Extension Relay | Active development, stability concerns per [GitHub issue #5799](https://github.com/openclaw/openclaw/issues/5799) | Good concepts, but stability concerns for production |
 | **Browser-Use** | Hybrid DOM + Vision, Python | Active development | Good candidate for future fallback |
 | **Skyvern** | Vision-only (no selectors) | Production-ready | Best for form-filling, complex infrastructure |
 | **Stagehand** | AI-adaptive SDK | Newer, simpler | Alternative option |
@@ -99,7 +99,11 @@ OpenClaw's Extension Relay mode demonstrates the value of connecting to existing
 
 ### 3.3 Current Generalization Analysis
 
-*Methodology: Scores represent subjective assessment of code abstraction level. 10 = fully abstract with no service-specific code, 5 = requires minor changes for new service, 1 = completely hardcoded.*
+*Methodology: Scores represent subjective assessment of code abstraction level based on code review:*
+- *10 = Fully abstract, no service-specific code (e.g., protocols.py)*
+- *7 = Minor hardcoding, easily parameterized (e.g., registry metadata-only)*
+- *3 = Significant hardcoding requiring refactoring (e.g., engine with type annotation)*
+- *1 = Completely hardcoded, major rewrite needed*
 
 | Component | Score | Issue |
 |-----------|-------|-------|
@@ -185,7 +189,7 @@ Not included in this feature. Foundation only.
 |-----------|--------|--------|
 | **CDP Connection** | Connection success rate | 100% when Chrome running with correct port |
 | **CDP Latency** | Time to connect | < 5 seconds |
-| **ARIA Fallback** | Success rate when CSS fails | 90%+ on mock pages with modified selectors |
+| **ARIA Fallback** | Success rate when CSS fails | 90%+ on test suite of 5+ mock pages with modified selectors (class renames, attribute removals, DOM restructures) |
 | **Backward Compatibility** | Existing test pass rate | 100% (all ~420 tests) |
 | **New Test Coverage** | New tests added | 10+ tests for CDP, ARIA, factory |
 | **Service Abstraction** | Engine accepts mock service | Mock ServiceProtocol works in tests |
@@ -223,6 +227,8 @@ Not included in this feature. Foundation only.
 | UI change resilience | ⚠️ ARIA helps but limited | ✅ Vision-based |
 | New service effort | ~8 hours | ~1 hour (just describe task) |
 | Per-transaction cost | ~$0.01-0.05 | ~$0.10-0.50 |
+
+*Cost estimates based on: Our approach uses Claude Vision only for state detection fallback (~$0.01/call). General agents use LLM for every action (click, navigate, read). Estimates assume 5-10 interactions per cancellation flow. Actual costs vary by API pricing.*
 
 **Conclusion:** Purpose-built with ARIA fallback is the right balance for now. Can layer in Browser-Use as a third-tier fallback later if needed.
 
