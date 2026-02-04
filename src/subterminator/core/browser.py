@@ -15,7 +15,7 @@ from playwright.async_api import (
     Playwright,
     async_playwright,
 )
-from playwright_stealth import Stealth  # type: ignore
+from playwright_stealth import Stealth
 
 from subterminator.utils.exceptions import (
     CDPConnectionError,
