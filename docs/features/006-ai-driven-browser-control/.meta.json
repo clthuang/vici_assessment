@@ -1,0 +1,24 @@
+{
+  "id": "006",
+  "slug": "ai-driven-browser-control",
+  "title": "AI-Driven Browser Control",
+  "status": "active",
+  "branch": "feature/006-ai-driven-browser-control",
+  "created": "2026-02-05T00:00:00Z",
+  "phases": {
+    "brainstorm": {
+      "completed": "2026-02-05T00:00:00Z"
+    },
+    "specify": {
+      "started": "2026-02-05T01:00:00Z",
+      "completed": "2026-02-05T01:30:00Z",
+      "iterations": 1,
+      "reviewerNotes": [
+        "Minor: ActionRecord and ErrorRecord schemas added to clarify list[dict] types",
+        "Minor: Text search clarified as case-insensitive substring match",
+        "Minor: State enum fully enumerated in tool schema"
+      ]
+    }
+  },
+  "currentPhase": "specify"
+}
