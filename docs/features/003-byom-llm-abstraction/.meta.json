@@ -2,7 +2,7 @@
   "id": "003",
   "slug": "byom-llm-abstraction",
   "mode": "full",
-  "status": "active",
+  "status": "paused",
   "created": "2026-02-03T20:00:00Z",
   "branch": "feature/003-byom-llm-abstraction",
   "brainstorm_source": "docs/brainstorms/2026-02-03-byom-llm-abstraction.prd.md",
