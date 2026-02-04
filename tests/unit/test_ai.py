@@ -322,7 +322,7 @@ class TestHeuristicInterpreter:
                 text="Click to finish cancellation.",
             )
             assert result.state == State.FINAL_CONFIRMATION
-            assert result.confidence == 0.80
+            assert result.confidence == 0.85
 
         def test_final_confirmation_confirm(
             self, interpreter: HeuristicInterpreter
@@ -333,7 +333,7 @@ class TestHeuristicInterpreter:
                 text="Please confirm cancellation of your subscription.",
             )
             assert result.state == State.FINAL_CONFIRMATION
-            assert result.confidence == 0.80
+            assert result.confidence == 0.85
 
         def test_final_confirmation_complete(
             self, interpreter: HeuristicInterpreter
@@ -344,7 +344,7 @@ class TestHeuristicInterpreter:
                 text="Complete cancellation now.",
             )
             assert result.state == State.FINAL_CONFIRMATION
-            assert result.confidence == 0.80
+            assert result.confidence == 0.85
 
         def test_cancellation_complete_cancelled(
             self, interpreter: HeuristicInterpreter
