@@ -4,9 +4,14 @@ This module provides the main orchestrator that coordinates the subscription
 cancellation flow using all the components built so far.
 """
 
+from __future__ import annotations
+
 import asyncio
+import logging
 from collections.abc import Awaitable, Callable
-from typing import TypeVar
+from typing import TYPE_CHECKING, TypeVar
+
+import anthropic
 
 from subterminator.core.ai import HeuristicInterpreter
 from subterminator.core.protocols import (
@@ -16,6 +21,11 @@ from subterminator.core.protocols import (
     ServiceProtocol,
     State,
 )
+
+if TYPE_CHECKING:
+    from subterminator.core.agent import AIBrowserAgent
+
+logger = logging.getLogger(__name__)
 
 # Note: CancellationStateMachine exists in states.py for documentation and potential
 # future use for strict transition validation. Currently, the engine manages states
@@ -77,6 +87,8 @@ class CancellationEngine:
         config: AppConfig,
         output_callback: Callable[[str, str], None] | None = None,
         input_callback: Callable[[str, int], str | None] | None = None,
+        use_agent: bool = False,
+        agent: "AIBrowserAgent | None" = None,
     ):
         """Initialize the CancellationEngine.
 
@@ -91,6 +103,10 @@ class CancellationEngine:
                 Signature: (state_name: str, message: str) -> None
             input_callback: Optional callback for human input.
                 Signature: (checkpoint_type: str, timeout_ms: int) -> str | None
+            use_agent: If True, use AI-first agent mode instead of heuristic-first.
+                (Deprecated: prefer using agent parameter)
+            agent: Optional AIBrowserAgent for AI-driven state handling.
+                If provided, delegates to agent.handle_state() for most states.
         """
         self.service = service
         self.browser = browser
@@ -100,10 +116,13 @@ class CancellationEngine:
         self.config = config
         self.output_callback = output_callback or (lambda state, msg: None)
         self.input_callback = input_callback
+        self.use_agent = use_agent
+        self.agent = agent
 
         self.dry_run = False
         self._current_state = State.START
         self._step = 0
+        self._action_history_cleared = False
 
     async def _click_selector(self, selector: SelectorConfig) -> None:
         """Click an element using SelectorConfig with CSS and optional ARIA fallback.
@@ -128,6 +147,64 @@ class CancellationEngine:
         """
         self.dry_run = dry_run
 
+        # Use agent mode if enabled
+        if self.use_agent:
+            return await self._run_agent_mode(dry_run)
+
+        # Original heuristic-first flow
+        return await self._run_heuristic_mode(dry_run)
+
+    async def _run_agent_mode(self, dry_run: bool) -> CancellationResult:
+        """Execute cancellation using AI-first agent mode.
+
+        Args:
+            dry_run: If True, stops before actual cancellation.
+
+        Returns:
+            CancellationResult indicating success or failure.
+        """
+        from subterminator.core.agent import AIBrowserAgent
+        from subterminator.core.ai import ClaudeActionPlanner
+
+        # Create planner if we have an API key
+        planner = None
+        if self.config.anthropic_api_key:
+            planner = ClaudeActionPlanner(api_key=self.config.anthropic_api_key)
+
+        # Create and run agent
+        agent = AIBrowserAgent(
+            browser=self.browser,
+            planner=planner,
+            heuristic=self.heuristic,
+            service=self.service,
+            max_steps=self.config.max_transitions,
+            input_callback=self.input_callback,
+            output_callback=self.output_callback,
+        )
+
+        try:
+            result = await agent.run(dry_run=dry_run)
+
+            # Convert AgentResult to CancellationResult
+            success = result.state in (State.COMPLETE, State.ACCOUNT_CANCELLED)
+            self._current_state = result.state
+
+            return self._complete(success, result.state, result.message)
+
+        except HumanInterventionRequired as e:
+            return self._complete(False, State.FAILED, str(e))
+        except Exception as e:
+            return self._complete(False, State.FAILED, f"Agent error: {e}")
+
+    async def _run_heuristic_mode(self, dry_run: bool) -> CancellationResult:
+        """Execute cancellation using original heuristic-first flow.
+
+        Args:
+            dry_run: If True, stops before actual cancellation.
+
+        Returns:
+            CancellationResult indicating success or failure.
+        """
         try:
             await self.browser.launch()
 
@@ -164,6 +241,10 @@ class CancellationEngine:
     async def _handle_state(self, state: State) -> State:
         """Process current state and determine next state.
 
+        If an agent is configured, delegates to agent.handle_state() for most
+        states, keeping hardcoded handling for START and LOGIN_REQUIRED.
+        Falls back to hardcoded handling if agent raises API errors.
+
         Args:
             state: The current state to handle.
 
@@ -172,6 +253,50 @@ class CancellationEngine:
         """
         self.output_callback(state.name, f"Handling state: {state.name}")
 
+        # START and LOGIN_REQUIRED always use hardcoded handling
+        if state in (State.START, State.LOGIN_REQUIRED):
+            return await self._hardcoded_handle_state(state)
+
+        # Try agent-driven handling if agent is configured
+        if self.agent:
+            try:
+                return await self._ai_driven_handle(state)
+            except (anthropic.APIStatusError, anthropic.APIConnectionError) as e:
+                logger.warning(f"AI agent failed, falling back to hardcoded: {e}")
+                # Fall through to hardcoded handling
+
+        # Hardcoded handling (fallback or no agent)
+        return await self._hardcoded_handle_state(state)
+
+    async def _ai_driven_handle(self, state: State) -> State:
+        """Handle state using AI agent.
+
+        Args:
+            state: The current state to handle.
+
+        Returns:
+            The next state after agent handling.
+        """
+        # Human checkpoint for FINAL_CONFIRMATION (unless dry_run)
+        if state == State.FINAL_CONFIRMATION and not self.dry_run:
+            await self._human_checkpoint("CONFIRM", self.config.confirm_timeout)
+
+        # Clear action history on first AI-driven call
+        if not self._action_history_cleared:
+            self.agent.clear_history()
+            self._action_history_cleared = True
+
+        return await self.agent.handle_state(state)
+
+    async def _hardcoded_handle_state(self, state: State) -> State:
+        """Process state using hardcoded logic.
+
+        Args:
+            state: The current state to handle.
+
+        Returns:
+            The next state to transition to.
+        """
         if state == State.START:
             await self.browser.navigate(
                 self.service.entry_url, self.config.page_timeout
@@ -187,9 +312,17 @@ class CancellationEngine:
             return await self._detect_state()
 
         elif state == State.ACCOUNT_ACTIVE:
-            await self._click_selector(self.service.selectors.cancel_link)
-            await asyncio.sleep(1)  # Wait for page transition
-            return await self._detect_state()
+            try:
+                await self._click_selector(self.service.selectors.cancel_link)
+                await asyncio.sleep(1)  # Wait for page transition
+                return await self._detect_state()
+            except ElementNotFound as e:
+                # Graceful degradation: transition to UNKNOWN for human intervention
+                self.output_callback(
+                    state.name,
+                    f"Cancel button not found ({e}). Requesting human assistance.",
+                )
+                return State.UNKNOWN
 
         elif state == State.ACCOUNT_CANCELLED:
             return State.COMPLETE  # Already done
@@ -201,9 +334,17 @@ class CancellationEngine:
             return State.FAILED
 
         elif state == State.RETENTION_OFFER:
-            await self._click_selector(self.service.selectors.decline_offer)
-            await asyncio.sleep(1)
-            return await self._detect_state()
+            try:
+                await self._click_selector(self.service.selectors.decline_offer)
+                await asyncio.sleep(1)
+                return await self._detect_state()
+            except ElementNotFound as e:
+                # Graceful degradation: transition to UNKNOWN for human intervention
+                self.output_callback(
+                    state.name,
+                    f"Decline button not found ({e}). Requesting human assistance.",
+                )
+                return State.UNKNOWN
 
         elif state == State.EXIT_SURVEY:
             await self._complete_survey()
@@ -216,9 +357,17 @@ class CancellationEngine:
                 )
                 return State.COMPLETE
             await self._human_checkpoint("CONFIRM", self.config.confirm_timeout)
-            await self._click_selector(self.service.selectors.confirm_cancel)
-            await asyncio.sleep(2)
-            return await self._detect_state()
+            try:
+                await self._click_selector(self.service.selectors.confirm_cancel)
+                await asyncio.sleep(2)
+                return await self._detect_state()
+            except ElementNotFound as e:
+                # Graceful degradation: transition to UNKNOWN for human intervention
+                self.output_callback(
+                    state.name,
+                    f"Confirm button not found ({e}). Requesting human assistance.",
+                )
+                return State.UNKNOWN
 
         elif state == State.UNKNOWN:
             # Try AI interpretation

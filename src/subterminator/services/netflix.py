@@ -38,17 +38,21 @@ class NetflixService:
         self.target = target
         self._config = ServiceConfig(
             name="Netflix",
-            entry_url="https://www.netflix.com/account",
+            entry_url="https://www.netflix.com/account/membership",
             mock_entry_url="http://localhost:8000/account",
             selectors=ServiceSelectors(
                 cancel_link=SelectorConfig(
                     css=[
+                        # New: Click "Manage membership" to navigate to cancel page
+                        "[data-uia='account-overview-page+membership-card+manage-membership']",
+                        "a:has-text('Manage membership')",
+                        # Original: Cancel button on membership page
                         "[data-uia='action-cancel-membership']",
                         "a:has-text('Cancel Membership')",
                         "button:has-text('Cancel Membership')",
                         ".cancel-membership-link",
                     ],
-                    aria=("link", "Cancel Membership"),
+                    aria=("link", "Manage membership"),
                 ),
                 decline_offer=SelectorConfig(
                     css=[
@@ -86,7 +90,7 @@ class NetflixService:
             ),
             text_indicators={
                 "login": ["Sign In", "Email", "Password", "Log In"],
-                "active": ["Cancel Membership", "Cancel Plan"],
+                "active": ["Cancel Membership", "Cancel Plan", "Manage membership"],
                 "cancelled": ["Restart Membership", "Restart your membership"],
                 "third_party": [
                     "Billed through", "iTunes", "Google Play", "T-Mobile", "App Store"

@@ -10,7 +10,10 @@ components depend on. It includes:
 from dataclasses import dataclass, field
 from enum import Enum, auto
 from pathlib import Path
-from typing import Any, Protocol
+from typing import TYPE_CHECKING, Any, Literal, Protocol
+
+if TYPE_CHECKING:
+    pass
 
 
 class State(Enum):
@@ -35,6 +38,88 @@ class State(Enum):
     ABORTED = auto()
     FAILED = auto()
     UNKNOWN = auto()
+
+
+class ActionType(Enum):
+    """Types of browser actions that can be executed.
+
+    Used by BrowserAction to specify what kind of action to perform.
+    """
+
+    CLICK = auto()
+    FILL = auto()
+    SELECT = auto()
+    NAVIGATE = auto()
+    WAIT = auto()
+    SCREENSHOT = auto()
+
+
+@dataclass
+class BrowserElement:
+    """Represents an element on a web page with accessibility information.
+
+    Attributes:
+        role: ARIA role of the element (e.g., "button", "link", "textbox").
+        name: Accessible name of the element.
+        selector: CSS selector to locate the element.
+        value: Optional current value of the element (for inputs).
+    """
+
+    role: str
+    name: str
+    selector: str
+    value: str | None = None
+
+    def describe(self) -> str:
+        """Return ARIA-format description of the element.
+
+        Returns:
+            String in format "ARIA: role=<role> name='<name>'"
+        """
+        return f"ARIA: role={self.role} name='{self.name}'"
+
+
+@dataclass
+class BrowserAction:
+    """Represents a browser action to be executed.
+
+    Attributes:
+        action_type: The type of action (click, fill, etc.).
+        selector: CSS selector for the target element.
+        value: Optional value for fill/select actions.
+        timeout: Optional timeout in milliseconds.
+        fallback_role: Optional ARIA role tuple (role, name) for fallback.
+    """
+
+    action_type: ActionType
+    selector: str
+    value: str | None = None
+    timeout: int | None = None
+    fallback_role: tuple[str, str] | None = None
+
+
+@dataclass
+class PlannedAction:
+    """Represents an AI-planned action with state context.
+
+    Attributes:
+        state: The detected page state.
+        action: The browser action to execute.
+        reasoning: Explanation for why this action was chosen.
+        confidence: Confidence score between 0.0 and 1.0.
+    """
+
+    state: "State"
+    action: BrowserAction
+    reasoning: str
+    confidence: float = 1.0
+
+    def __post_init__(self) -> None:
+        """Validate confidence is within valid range."""
+        if not 0.0 <= self.confidence <= 1.0:
+            raise ValueError(
+                f"confidence must be between 0.0 and 1.0, got {self.confidence}"
+            )
 
 
 @dataclass
@@ -79,6 +164,257 @@ class CancellationResult:
     message: str
     session_dir: Path | None = None
     effective_date: str | None = None
+
+
+@dataclass(frozen=True)
+class ActionRecord:
+    """Record of a completed browser action.
+
+    Attributes:
+        action_type: The type of action performed (e.g., "click", "fill").
+        target_description: Description of the target element.
+        success: Whether the action succeeded.
+        timestamp: ISO format timestamp of when the action occurred.
+    """
+
+    action_type: str
+    target_description: str
+    success: bool
+    timestamp: str
+
+    def to_dict(self) -> dict[str, Any]:
+        """Convert to dictionary representation.
+
+        Returns:
+            Dictionary with action, target, success, and time keys.
+        """
+        return {
+            "action": self.action_type,
+            "target": self.target_description,
+            "success": self.success,
+            "time": self.timestamp,
+        }
+
+
+@dataclass(frozen=True)
+class ErrorRecord:
+    """Record of an error that occurred during action execution.
+
+    Attributes:
+        action_type: The type of action that failed.
+        error_type: Classification of the error (e.g., "ElementNotFound").
+        error_message: Detailed error message.
+        strategy_attempted: Description of the targeting strategy used.
+        timestamp: ISO format timestamp of when the error occurred.
+    """
+
+    action_type: str
+    error_type: str
+    error_message: str
+    strategy_attempted: str
+    timestamp: str
+
+    def to_dict(self) -> dict[str, Any]:
+        """Convert to dictionary representation.
+
+        Returns:
+            Dictionary with action, error, message, strategy, and time keys.
+        """
+        return {
+            "action": self.action_type,
+            "error": self.error_type,
+            "message": self.error_message,
+            "strategy": self.strategy_attempted,
+            "time": self.timestamp,
+        }
+
+
+@dataclass
+class TargetStrategy:
+    """Strategy for locating an element on a page.
+
+    Supports multiple targeting methods: CSS selectors, ARIA attributes,
+    text content, or screen coordinates.
+
+    Attributes:
+        method: The targeting method to use.
+        css_selector: CSS selector (required if method is "css").
+        aria_role: ARIA role (required if method is "aria").
+        aria_name: ARIA name (optional, used with aria method).
+        text_content: Text to search for (required if method is "text").
+        coordinates: Screen coordinates (required if method is "coordinates").
+    """
+
+    method: Literal["css", "aria", "text", "coordinates"]
+    css_selector: str | None = None
+    aria_role: str | None = None
+    aria_name: str | None = None
+    text_content: str | None = None
+    coordinates: tuple[int, int] | None = None
+
+    def __post_init__(self) -> None:
+        """Validate that required fields are present for the specified method."""
+        if self.method == "css" and not self.css_selector:
+            raise ValueError("css_selector required when method is 'css'")
+        if self.method == "aria" and not self.aria_role:
+            raise ValueError("aria_role required when method is 'aria'")
+        if self.method == "text" and not self.text_content:
+            raise ValueError("text_content required when method is 'text'")
+        if self.method == "coordinates" and not self.coordinates:
+            raise ValueError("coordinates required when method is 'coordinates'")
+
+    def describe(self) -> str:
+        """Return a human-readable description of this targeting strategy.
+
+        Returns:
+            String describing the targeting strategy.
+        """
+        if self.method == "css":
+            return f"CSS: {self.css_selector}"
+        elif self.method == "aria":
+            return f"ARIA: role={self.aria_role} name='{self.aria_name}'"
+        elif self.method == "text":
+            return f"Text: {self.text_content}"
+        elif self.method == "coordinates":
+            return f"Coordinates: {self.coordinates}"
+        return f"Unknown method: {self.method}"
+
+
+@dataclass
+class ActionPlan:
+    """Plan for executing a browser action with fallback strategies.
+
+    Attributes:
+        action_type: The type of action to perform.
+        primary_target: The primary targeting strategy.
+        fallback_targets: Alternative strategies if primary fails (max 3).
+        value: Value for fill/select actions.
+        reasoning: Explanation of why this action was planned.
+        confidence: Confidence score between 0.0 and 1.0.
+        expected_state: The expected state after action completes.
+    """
+
+    action_type: Literal["click", "fill", "select"]
+    primary_target: TargetStrategy
+    fallback_targets: list[TargetStrategy] = field(default_factory=list)
+    value: str | None = None
+    reasoning: str = ""
+    confidence: float = 0.0
+    expected_state: "State | None" = None
+
+    def __post_init__(self) -> None:
+        """Validate action plan constraints."""
+        if len(self.fallback_targets) > 3:
+            raise ValueError("max 3 fallbacks")
+        if not 0 <= self.confidence <= 1:
+            raise ValueError(
+                f"confidence must be between 0.0 and 1.0, got {self.confidence}"
+            )
+        if self.action_type in ("fill", "select") and not self.value:
+            raise ValueError(
+                f"value required for {self.action_type} actions"
+            )
+
+    def all_targets(self) -> list[TargetStrategy]:
+        """Return all targeting strategies in order of preference.
+
+        Returns:
+            List containing primary target followed by fallback targets.
+        """
+        return [self.primary_target] + self.fallback_targets
+
+
+@dataclass
+class AgentContext:
+    """Context information provided to the AI agent for decision making.
+
+    Attributes:
+        screenshot: PNG bytes of the current page.
+        accessibility_tree: Text representation of the accessibility tree.
+        html_snippet: Relevant HTML snippet from the page.
+        url: Current page URL.
+        visible_text: Visible text content on the page.
+        previous_actions: History of completed actions.
+        error_history: History of errors encountered.
+        viewport_size: Browser viewport dimensions (width, height).
+        scroll_position: Current scroll position (x, y).
+    """
+
+    screenshot: bytes
+    accessibility_tree: str
+    html_snippet: str
+    url: str
+    visible_text: str
+    previous_actions: list[ActionRecord]
+    error_history: list[ErrorRecord]
+    viewport_size: tuple[int, int]
+    scroll_position: tuple[int, int]
+
+    def to_prompt_context(self) -> str:
+        """Convert context to a formatted string for AI prompts.
+
+        Returns:
+            Formatted string with all context information.
+        """
+        actions_summary = "\n".join(
+            f"- {a.action_type} on {a.target_description}: {'success' if a.success else 'failed'}"
+            for a in self.previous_actions
+        ) or "None"
+
+        errors_summary = "\n".join(
+            f"- {e.action_type}: {e.error_type} - {e.error_message}"
+            for e in self.error_history
+        ) or "None"
+
+        return (
+            f"URL: {self.url}\n"
+            f"Viewport: {self.viewport_size[0]}x{self.viewport_size[1]}\n"
+            f"Scroll: ({self.scroll_position[0]}, {self.scroll_position[1]})\n"
+            f"ACCESSIBILITY TREE:\n{self.accessibility_tree}\n"
+            f"HTML SNIPPET:\n{self.html_snippet}\n"
+            f"PREVIOUS ACTIONS:\n{actions_summary}\n"
+            f"ERRORS:\n{errors_summary}"
+        )
+
+
+@dataclass
+class ExecutionResult:
+    """Result of executing an action plan.
+
+    Attributes:
+        success: Whether the action succeeded.
+        action_plan: The action plan that was executed.
+        strategy_used: The targeting strategy that succeeded (if any).
+        error: Error message if the action failed.
+        screenshot_after: Screenshot taken after action execution.
+        elapsed_ms: Time taken to execute the action in milliseconds.
+    """
+
+    success: bool
+    action_plan: ActionPlan
+    strategy_used: TargetStrategy | None = None
+    error: str | None = None
+    screenshot_after: bytes | None = None
+    elapsed_ms: int = 0
+
+
+@dataclass
+class ValidationResult:
+    """Result of validating the page state after an action.
+
+    Attributes:
+        success: Whether validation succeeded (actual matches expected).
+        expected_state: The state that was expected.
+        actual_state: The state that was observed.
+        confidence: Confidence in the state detection.
+        message: Human-readable description of the validation result.
+    """
+
+    success: bool
+    expected_state: "State"
+    actual_state: "State"
+    confidence: float
+    message: str
 
 
 class BrowserProtocol(Protocol):

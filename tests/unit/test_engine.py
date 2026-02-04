@@ -1063,3 +1063,727 @@ class TestEngineAllTestsPass:
 
         source = inspect.getsource(engine)
         assert "from subterminator.services.netflix import NetflixService" not in source
+
+
+class TestElementNotFoundRecovery:
+    """Tests for graceful degradation when ElementNotFound occurs."""
+
+    @pytest.mark.asyncio
+    async def test_account_active_element_not_found_transitions_to_unknown(
+        self, tmp_path: Path
+    ) -> None:
+        """ACCOUNT_ACTIVE handler should transition to UNKNOWN on ElementNotFound."""
+        from subterminator.core.ai import HeuristicInterpreter
+        from subterminator.core.engine import CancellationEngine
+        from subterminator.utils.exceptions import ElementNotFound
+        from subterminator.utils.session import SessionLogger
+
+        mock_service = MockService()
+        mock_browser = AsyncMock()
+        # Simulate ElementNotFound when clicking cancel_link
+        mock_browser.click = AsyncMock(side_effect=ElementNotFound("Cancel button"))
+
+        session = SessionLogger(
+            output_dir=tmp_path, service="test", target="test@example.com"
+        )
+        config = AppConfig(anthropic_api_key=None, output_dir=tmp_path)
+
+        captured_messages: list[tuple[str, str]] = []
+
+        def capture_output(state: str, msg: str) -> None:
+            captured_messages.append((state, msg))
+
+        engine = CancellationEngine(
+            service=mock_service,
+            browser=mock_browser,
+            heuristic=HeuristicInterpreter(),
+            ai=None,
+            session=session,
+            config=config,
+            output_callback=capture_output,
+        )
+
+        # Handle ACCOUNT_ACTIVE state
+        next_state = await engine._handle_state(State.ACCOUNT_ACTIVE)
+
+        # Should transition to UNKNOWN for human intervention
+        assert next_state == State.UNKNOWN
+        # Should log the error
+        error_messages = [
+            msg for state, msg in captured_messages
+            if "not found" in msg.lower()
+        ]
+        assert len(error_messages) == 1
+        assert "human assistance" in error_messages[0].lower()
+
+    @pytest.mark.asyncio
+    async def test_retention_offer_element_not_found_transitions_to_unknown(
+        self, tmp_path: Path
+    ) -> None:
+        """RETENTION_OFFER handler should transition to UNKNOWN on ElementNotFound."""
+        from subterminator.core.ai import HeuristicInterpreter
+        from subterminator.core.engine import CancellationEngine
+        from subterminator.utils.exceptions import ElementNotFound
+        from subterminator.utils.session import SessionLogger
+
+        mock_service = MockService()
+        mock_browser = AsyncMock()
+        mock_browser.click = AsyncMock(side_effect=ElementNotFound("Decline button"))
+
+        session = SessionLogger(
+            output_dir=tmp_path, service="test", target="test@example.com"
+        )
+        config = AppConfig(anthropic_api_key=None, output_dir=tmp_path)
+
+        captured_messages: list[tuple[str, str]] = []
+
+        def capture_output(state: str, msg: str) -> None:
+            captured_messages.append((state, msg))
+
+        engine = CancellationEngine(
+            service=mock_service,
+            browser=mock_browser,
+            heuristic=HeuristicInterpreter(),
+            ai=None,
+            session=session,
+            config=config,
+            output_callback=capture_output,
+        )
+
+        next_state = await engine._handle_state(State.RETENTION_OFFER)
+
+        assert next_state == State.UNKNOWN
+        error_messages = [
+            msg for state, msg in captured_messages
+            if "not found" in msg.lower()
+        ]
+        assert len(error_messages) == 1
+
+    @pytest.mark.asyncio
+    async def test_final_confirmation_element_not_found_transitions_to_unknown(
+        self, tmp_path: Path
+    ) -> None:
+        """FINAL_CONFIRMATION handler should transition to UNKNOWN on ElementNotFound."""
+        from subterminator.core.ai import HeuristicInterpreter
+        from subterminator.core.engine import CancellationEngine
+        from subterminator.utils.exceptions import ElementNotFound
+        from subterminator.utils.session import SessionLogger
+
+        mock_service = MockService()
+        mock_browser = AsyncMock()
+        mock_browser.click = AsyncMock(side_effect=ElementNotFound("Confirm button"))
+
+        session = SessionLogger(
+            output_dir=tmp_path, service="test", target="test@example.com"
+        )
+        config = AppConfig(anthropic_api_key=None, output_dir=tmp_path)
+
+        captured_messages: list[tuple[str, str]] = []
+
+        def capture_output(state: str, msg: str) -> None:
+            captured_messages.append((state, msg))
+
+        engine = CancellationEngine(
+            service=mock_service,
+            browser=mock_browser,
+            heuristic=HeuristicInterpreter(),
+            ai=None,
+            session=session,
+            config=config,
+            output_callback=capture_output,
+            input_callback=lambda checkpoint, timeout: "confirm",  # Pass confirmation
+        )
+
+        next_state = await engine._handle_state(State.FINAL_CONFIRMATION)
+
+        assert next_state == State.UNKNOWN
+        error_messages = [
+            msg for state, msg in captured_messages
+            if "not found" in msg.lower()
+        ]
+        assert len(error_messages) == 1
+
+    @pytest.mark.asyncio
+    async def test_account_active_success_does_not_transition_to_unknown(
+        self, tmp_path: Path
+    ) -> None:
+        """ACCOUNT_ACTIVE handler should proceed normally when click succeeds."""
+        from subterminator.core.ai import HeuristicInterpreter
+        from subterminator.core.engine import CancellationEngine
+        from subterminator.utils.session import SessionLogger
+
+        mock_service = MockService()
+        mock_browser = AsyncMock()
+        # Simulate successful click and page content for state detection
+        mock_browser.click = AsyncMock(return_value=None)
+        mock_browser.url = AsyncMock(return_value="https://test.example.com/account")
+        mock_browser.text_content = AsyncMock(return_value="Why are you leaving?")
+        mock_browser.screenshot = AsyncMock(return_value=b"fake_screenshot")
+
+        session = SessionLogger(
+            output_dir=tmp_path, service="test", target="test@example.com"
+        )
+        config = AppConfig(anthropic_api_key=None, output_dir=tmp_path)
+
+        engine = CancellationEngine(
+            service=mock_service,
+            browser=mock_browser,
+            heuristic=HeuristicInterpreter(),
+            ai=None,
+            session=session,
+            config=config,
+        )
+
+        next_state = await engine._handle_state(State.ACCOUNT_ACTIVE)
+
+        # Should detect EXIT_SURVEY from "Why are you leaving?" text
+        assert next_state == State.EXIT_SURVEY
+
+
+# --- Phase 5: Engine Integration with AIBrowserAgent ---
+
+
+class TestEngineAgentMode:
+    """Tests for engine AI-first agent mode (Tasks 5.2-5.7)."""
+
+    def test_engine_accepts_use_agent_parameter(self, tmp_path: Path) -> None:
+        """Engine should accept use_agent parameter (5.2)."""
+        from subterminator.core.ai import HeuristicInterpreter
+        from subterminator.core.engine import CancellationEngine
+        from subterminator.utils.session import SessionLogger
+
+        mock_service = MockService()
+        mock_browser = MagicMock()
+        session = SessionLogger(
+            output_dir=tmp_path, service="test", target="test@example.com"
+        )
+        config = AppConfig(anthropic_api_key="test-key", output_dir=tmp_path)
+
+        engine = CancellationEngine(
+            service=mock_service,
+            browser=mock_browser,
+            heuristic=HeuristicInterpreter(),
+            ai=None,
+            session=session,
+            config=config,
+            use_agent=True
+        )
+
+        assert engine.use_agent is True
+
+    def test_engine_use_agent_defaults_to_false(self, tmp_path: Path) -> None:
+        """Engine use_agent should default to False (5.2)."""
+        from subterminator.core.ai import HeuristicInterpreter
+        from subterminator.core.engine import CancellationEngine
+        from subterminator.utils.session import SessionLogger
+
+        mock_service = MockService()
+        mock_browser = MagicMock()
+        session = SessionLogger(
+            output_dir=tmp_path, service="test", target="test@example.com"
+        )
+        config = AppConfig(anthropic_api_key=None, output_dir=tmp_path)
+
+        engine = CancellationEngine(
+            service=mock_service,
+            browser=mock_browser,
+            heuristic=HeuristicInterpreter(),
+            ai=None,
+            session=session,
+            config=config
+        )
+
+        assert engine.use_agent is False
+
+    @pytest.mark.asyncio
+    async def test_agent_mode_creates_ai_browser_agent(self, tmp_path: Path) -> None:
+        """Agent mode should create AIBrowserAgent when running (5.3)."""
+        from unittest.mock import patch
+
+        from subterminator.core.ai import HeuristicInterpreter
+        from subterminator.core.engine import CancellationEngine
+        from subterminator.utils.session import SessionLogger
+
+        mock_service = MockService()
+        mock_browser = AsyncMock()
+        mock_browser.launch = AsyncMock()
+        mock_browser.close = AsyncMock()
+        mock_browser.navigate = AsyncMock()
+        mock_browser.screenshot = AsyncMock(return_value=b"fake")
+        mock_browser.url = AsyncMock(return_value="https://example.com")
+        mock_browser.text_content = AsyncMock(return_value="Complete")
+        mock_browser.accessibility_snapshot = AsyncMock(return_value={})
+        mock_browser.execute_action = AsyncMock()
+        mock_browser.wait_for_navigation = AsyncMock()
+
+        session = SessionLogger(
+            output_dir=tmp_path, service="test", target="test@example.com"
+        )
+        config = AppConfig(anthropic_api_key="test-key", output_dir=tmp_path)
+
+        engine = CancellationEngine(
+            service=mock_service,
+            browser=mock_browser,
+            heuristic=HeuristicInterpreter(),
+            ai=None,
+            session=session,
+            config=config,
+            use_agent=True
+        )
+
+        # Mock the agent to return success
+        with patch("subterminator.core.agent.AIBrowserAgent") as mock_agent_class:
+            mock_agent_instance = AsyncMock()
+            mock_agent_instance.run = AsyncMock(return_value=MagicMock(
+                state=State.COMPLETE,
+                message="Success",
+                steps=3
+            ))
+            mock_agent_class.return_value = mock_agent_instance
+
+            await engine.run()
+
+            # Verify AIBrowserAgent was instantiated
+            mock_agent_class.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_agent_mode_returns_cancellation_result(self, tmp_path: Path) -> None:
+        """Agent mode should return CancellationResult (5.4)."""
+        from unittest.mock import patch
+
+        from subterminator.core.ai import HeuristicInterpreter
+        from subterminator.core.engine import CancellationEngine
+        from subterminator.utils.session import SessionLogger
+
+        mock_service = MockService()
+        mock_browser = AsyncMock()
+
+        session = SessionLogger(
+            output_dir=tmp_path, service="test", target="test@example.com"
+        )
+        config = AppConfig(anthropic_api_key="test-key", output_dir=tmp_path)
+
+        engine = CancellationEngine(
+            service=mock_service,
+            browser=mock_browser,
+            heuristic=HeuristicInterpreter(),
+            ai=None,
+            session=session,
+            config=config,
+            use_agent=True
+        )
+
+        with patch("subterminator.core.agent.AIBrowserAgent") as mock_agent_class:
+            mock_agent_instance = AsyncMock()
+            mock_agent_instance.run = AsyncMock(return_value=MagicMock(
+                state=State.COMPLETE,
+                message="Cancellation completed",
+                steps=5
+            ))
+            mock_agent_class.return_value = mock_agent_instance
+
+            result = await engine.run()
+
+            assert isinstance(result, CancellationResult)
+            assert result.state == State.COMPLETE
+            assert result.success is True
+
+    @pytest.mark.asyncio
+    async def test_agent_mode_passes_planner_to_agent(self, tmp_path: Path) -> None:
+        """Agent mode should pass planner to AIBrowserAgent (5.5)."""
+        from unittest.mock import patch
+
+        from subterminator.core.ai import ClaudeActionPlanner, HeuristicInterpreter
+        from subterminator.core.engine import CancellationEngine
+        from subterminator.utils.session import SessionLogger
+
+        mock_service = MockService()
+        mock_browser = AsyncMock()
+
+        session = SessionLogger(
+            output_dir=tmp_path, service="test", target="test@example.com"
+        )
+        config = AppConfig(anthropic_api_key="test-key", output_dir=tmp_path)
+
+        engine = CancellationEngine(
+            service=mock_service,
+            browser=mock_browser,
+            heuristic=HeuristicInterpreter(),
+            ai=None,
+            session=session,
+            config=config,
+            use_agent=True
+        )
+
+        with patch("subterminator.core.agent.AIBrowserAgent") as mock_agent_class:
+            mock_agent_instance = AsyncMock()
+            mock_agent_instance.run = AsyncMock(return_value=MagicMock(
+                state=State.COMPLETE,
+                message="Success",
+                steps=1
+            ))
+            mock_agent_class.return_value = mock_agent_instance
+
+            with patch("subterminator.core.ai.ClaudeActionPlanner") as mock_planner_class:
+                mock_planner = MagicMock()
+                mock_planner_class.return_value = mock_planner
+
+                await engine.run()
+
+                # Verify planner was passed to agent
+                call_kwargs = mock_agent_class.call_args.kwargs
+                assert "planner" in call_kwargs
+
+    @pytest.mark.asyncio
+    async def test_agent_mode_passes_callbacks(self, tmp_path: Path) -> None:
+        """Agent mode should pass output/input callbacks to agent (5.6)."""
+        from unittest.mock import patch
+
+        from subterminator.core.ai import HeuristicInterpreter
+        from subterminator.core.engine import CancellationEngine
+        from subterminator.utils.session import SessionLogger
+
+        mock_service = MockService()
+        mock_browser = AsyncMock()
+
+        session = SessionLogger(
+            output_dir=tmp_path, service="test", target="test@example.com"
+        )
+        config = AppConfig(anthropic_api_key="test-key", output_dir=tmp_path)
+
+        output_callback = MagicMock()
+        input_callback = MagicMock(return_value="confirm")
+
+        engine = CancellationEngine(
+            service=mock_service,
+            browser=mock_browser,
+            heuristic=HeuristicInterpreter(),
+            ai=None,
+            session=session,
+            config=config,
+            use_agent=True,
+            output_callback=output_callback,
+            input_callback=input_callback
+        )
+
+        with patch("subterminator.core.agent.AIBrowserAgent") as mock_agent_class:
+            mock_agent_instance = AsyncMock()
+            mock_agent_instance.run = AsyncMock(return_value=MagicMock(
+                state=State.COMPLETE,
+                message="Success",
+                steps=1
+            ))
+            mock_agent_class.return_value = mock_agent_instance
+
+            await engine.run()
+
+            # Verify callbacks were passed
+            call_kwargs = mock_agent_class.call_args.kwargs
+            assert "output_callback" in call_kwargs
+            assert "input_callback" in call_kwargs
+
+    @pytest.mark.asyncio
+    async def test_non_agent_mode_uses_original_flow(self, tmp_path: Path) -> None:
+        """Non-agent mode should use original state machine flow (5.7)."""
+        from subterminator.core.ai import HeuristicInterpreter
+        from subterminator.core.engine import CancellationEngine
+        from subterminator.utils.session import SessionLogger
+
+        mock_service = MockService()
+        mock_browser = AsyncMock()
+        mock_browser.launch = AsyncMock()
+        mock_browser.close = AsyncMock()
+        mock_browser.navigate = AsyncMock()
+        # Simulate immediately reaching COMPLETE state
+        mock_browser.url = AsyncMock(return_value="https://example.com")
+        mock_browser.text_content = AsyncMock(return_value="Cancellation is complete")
+        mock_browser.screenshot = AsyncMock(return_value=b"fake")
+
+        session = SessionLogger(
+            output_dir=tmp_path, service="test", target="test@example.com"
+        )
+        config = AppConfig(anthropic_api_key=None, output_dir=tmp_path)
+
+        engine = CancellationEngine(
+            service=mock_service,
+            browser=mock_browser,
+            heuristic=HeuristicInterpreter(),
+            ai=None,
+            session=session,
+            config=config,
+            use_agent=False  # Explicitly disable agent mode
+        )
+
+        result = await engine.run()
+
+        # Should have used original flow (browser.launch was called directly)
+        mock_browser.launch.assert_called_once()
+
+
+class TestEngineAgentModeExports:
+    """Tests for engine agent mode exports."""
+
+    def test_engine_module_imports_ai_browser_agent(self) -> None:
+        """Engine module should be able to import AIBrowserAgent."""
+        from subterminator.core.engine import CancellationEngine
+        from subterminator.core.agent import AIBrowserAgent
+
+        assert AIBrowserAgent is not None
+        assert CancellationEngine is not None
+
+
+# --- Phase 6: Engine with agent parameter tests ---
+
+
+class TestEngineAgentParameter:
+    """Tests for engine with agent parameter (spec compliance)."""
+
+    def test_engine_accepts_agent_parameter(self, tmp_path: Path) -> None:
+        """Engine should accept agent parameter."""
+        from subterminator.core.ai import HeuristicInterpreter
+        from subterminator.core.engine import CancellationEngine
+        from subterminator.utils.session import SessionLogger
+
+        mock_service = MockService()
+        mock_browser = MagicMock()
+        mock_agent = MagicMock()
+
+        session = SessionLogger(
+            output_dir=tmp_path, service="test", target="test@example.com"
+        )
+        config = AppConfig(anthropic_api_key=None, output_dir=tmp_path)
+
+        engine = CancellationEngine(
+            service=mock_service,
+            browser=mock_browser,
+            heuristic=HeuristicInterpreter(),
+            ai=None,
+            session=session,
+            config=config,
+            agent=mock_agent,
+        )
+
+        assert engine.agent is mock_agent
+
+    def test_engine_agent_defaults_to_none(self, tmp_path: Path) -> None:
+        """Engine agent should default to None."""
+        from subterminator.core.ai import HeuristicInterpreter
+        from subterminator.core.engine import CancellationEngine
+        from subterminator.utils.session import SessionLogger
+
+        mock_service = MockService()
+        mock_browser = MagicMock()
+
+        session = SessionLogger(
+            output_dir=tmp_path, service="test", target="test@example.com"
+        )
+        config = AppConfig(anthropic_api_key=None, output_dir=tmp_path)
+
+        engine = CancellationEngine(
+            service=mock_service,
+            browser=mock_browser,
+            heuristic=HeuristicInterpreter(),
+            ai=None,
+            session=session,
+            config=config,
+        )
+
+        assert engine.agent is None
+
+    @pytest.mark.asyncio
+    async def test_engine_without_agent_uses_hardcoded(self, tmp_path: Path) -> None:
+        """Engine with agent=None should use hardcoded state handling."""
+        from subterminator.core.ai import HeuristicInterpreter
+        from subterminator.core.engine import CancellationEngine
+        from subterminator.utils.session import SessionLogger
+
+        mock_service = MockService()
+        mock_browser = AsyncMock()
+        mock_browser.launch = AsyncMock()
+        mock_browser.close = AsyncMock()
+        mock_browser.navigate = AsyncMock()
+        mock_browser.url = AsyncMock(return_value="https://example.com")
+        mock_browser.text_content = AsyncMock(return_value="Cancellation is complete")
+        mock_browser.screenshot = AsyncMock(return_value=b"fake")
+
+        session = SessionLogger(
+            output_dir=tmp_path, service="test", target="test@example.com"
+        )
+        config = AppConfig(anthropic_api_key=None, output_dir=tmp_path)
+
+        engine = CancellationEngine(
+            service=mock_service,
+            browser=mock_browser,
+            heuristic=HeuristicInterpreter(),
+            ai=None,
+            session=session,
+            config=config,
+            agent=None,  # Explicitly no agent
+        )
+
+        result = await engine.run()
+
+        # Should have completed using hardcoded flow
+        mock_browser.launch.assert_called_once()
+        assert result.state == State.COMPLETE
+
+    @pytest.mark.asyncio
+    async def test_engine_with_agent_delegates_handle_state(
+        self, tmp_path: Path
+    ) -> None:
+        """Engine with agent should delegate to agent.handle_state()."""
+        from subterminator.core.ai import HeuristicInterpreter
+        from subterminator.core.engine import CancellationEngine
+        from subterminator.utils.session import SessionLogger
+
+        mock_service = MockService()
+        mock_browser = AsyncMock()
+        mock_browser.launch = AsyncMock()
+        mock_browser.close = AsyncMock()
+        mock_browser.navigate = AsyncMock()
+        # First detect returns ACCOUNT_ACTIVE, then agent takes over
+        mock_browser.url = AsyncMock(return_value="https://example.com/account")
+        mock_browser.text_content = AsyncMock(return_value="Cancel membership Account")
+        mock_browser.screenshot = AsyncMock(return_value=b"fake")
+
+        # Mock agent that returns COMPLETE on handle_state
+        mock_agent = AsyncMock()
+        mock_agent.handle_state = AsyncMock(return_value=State.COMPLETE)
+        mock_agent.clear_history = MagicMock()
+
+        session = SessionLogger(
+            output_dir=tmp_path, service="test", target="test@example.com"
+        )
+        config = AppConfig(anthropic_api_key=None, output_dir=tmp_path)
+
+        engine = CancellationEngine(
+            service=mock_service,
+            browser=mock_browser,
+            heuristic=HeuristicInterpreter(),
+            ai=None,
+            session=session,
+            config=config,
+            agent=mock_agent,
+        )
+
+        result = await engine.run()
+
+        # Agent's handle_state should have been called for ACCOUNT_ACTIVE
+        mock_agent.handle_state.assert_called_with(State.ACCOUNT_ACTIVE)
+        mock_agent.clear_history.assert_called_once()
+        assert result.state == State.COMPLETE
+
+    @pytest.mark.asyncio
+    async def test_engine_keeps_hardcoded_for_start_and_login(
+        self, tmp_path: Path
+    ) -> None:
+        """Engine should use hardcoded handling for START and LOGIN_REQUIRED."""
+        from subterminator.core.ai import HeuristicInterpreter
+        from subterminator.core.engine import CancellationEngine
+        from subterminator.utils.session import SessionLogger
+
+        mock_service = MockService()
+        mock_browser = AsyncMock()
+        mock_browser.launch = AsyncMock()
+        mock_browser.close = AsyncMock()
+        mock_browser.navigate = AsyncMock()
+        # First returns login page, after login returns complete
+        mock_browser.url = AsyncMock(
+            side_effect=[
+                "https://example.com/login",  # START detection
+                "https://example.com",  # After LOGIN_REQUIRED detection
+            ]
+        )
+        mock_browser.text_content = AsyncMock(
+            side_effect=[
+                "Sign in password",  # LOGIN_REQUIRED
+                "Cancellation is complete",  # COMPLETE
+            ]
+        )
+        mock_browser.screenshot = AsyncMock(return_value=b"fake")
+
+        mock_agent = AsyncMock()
+        mock_agent.handle_state = AsyncMock(return_value=State.COMPLETE)
+        mock_agent.clear_history = MagicMock()
+
+        session = SessionLogger(
+            output_dir=tmp_path, service="test", target="test@example.com"
+        )
+        config = AppConfig(anthropic_api_key=None, output_dir=tmp_path)
+
+        engine = CancellationEngine(
+            service=mock_service,
+            browser=mock_browser,
+            heuristic=HeuristicInterpreter(),
+            ai=None,
+            session=session,
+            config=config,
+            agent=mock_agent,
+            input_callback=lambda checkpoint, timeout: "",  # Auto-confirm login
+        )
+
+        result = await engine.run()
+
+        # START and LOGIN_REQUIRED should NOT call agent
+        # Agent should only be called for ACCOUNT_ACTIVE or later states
+        # In this test, we go directly to COMPLETE so agent won't be called
+        assert result.success is True
+
+    @pytest.mark.asyncio
+    async def test_engine_fallback_on_api_error(self, tmp_path: Path) -> None:
+        """Engine should fall back to hardcoded on API errors."""
+        import anthropic as anthropic_module
+
+        from subterminator.core.ai import HeuristicInterpreter
+        from subterminator.core.engine import CancellationEngine
+        from subterminator.utils.session import SessionLogger
+
+        mock_service = MockService()
+        mock_browser = AsyncMock()
+        mock_browser.launch = AsyncMock()
+        mock_browser.close = AsyncMock()
+        mock_browser.navigate = AsyncMock()
+        mock_browser.click = AsyncMock()
+        # Returns ACCOUNT_ACTIVE first, then COMPLETE after action
+        mock_browser.url = AsyncMock(
+            side_effect=[
+                "https://example.com/account",
+                "https://example.com/complete",
+            ]
+        )
+        mock_browser.text_content = AsyncMock(
+            side_effect=[
+                "Cancel membership Account",  # ACCOUNT_ACTIVE
+                "Cancellation is complete",  # COMPLETE
+            ]
+        )
+        mock_browser.screenshot = AsyncMock(return_value=b"fake")
+
+        # Mock agent that raises API error
+        mock_agent = AsyncMock()
+        mock_agent.handle_state = AsyncMock(
+            side_effect=anthropic_module.APIConnectionError(request=MagicMock())
+        )
+        mock_agent.clear_history = MagicMock()
+
+        session = SessionLogger(
+            output_dir=tmp_path, service="test", target="test@example.com"
+        )
+        config = AppConfig(anthropic_api_key=None, output_dir=tmp_path)
+
+        engine = CancellationEngine(
+            service=mock_service,
+            browser=mock_browser,
+            heuristic=HeuristicInterpreter(),
+            ai=None,
+            session=session,
+            config=config,
+            agent=mock_agent,
+        )
+
+        result = await engine.run()
+
+        # Should have fallen back to hardcoded and succeeded
+        mock_agent.handle_state.assert_called()
+        mock_browser.click.assert_called()  # Hardcoded click action
+        assert result.success is True
