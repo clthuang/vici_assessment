@@ -6,7 +6,7 @@ for use in subscription cancellation flows.
 """
 
 from playwright.async_api import Browser, Page, Playwright, async_playwright
-from playwright_stealth import Stealth
+from playwright_stealth import Stealth  # type: ignore[import-untyped]
 
 from subterminator.utils.exceptions import ElementNotFound, NavigationError
 

@@ -166,6 +166,10 @@ class CancellationEngine:
 
         elif state == State.LOGIN_REQUIRED:
             await self._human_checkpoint("AUTH", self.config.auth_timeout)
+            # Navigate to entry URL after login to ensure correct page for detection
+            await self.browser.navigate(
+                self.service.entry_url, self.config.page_timeout
+            )
             return await self._detect_state()
 
         elif state == State.ACCOUNT_ACTIVE:
@@ -211,6 +215,10 @@ class CancellationEngine:
                     return ai_result.state
             # Ask human
             await self._human_checkpoint("UNKNOWN", self.config.auth_timeout)
+            # Navigate to entry URL after manual intervention for recovery
+            await self.browser.navigate(
+                self.service.entry_url, self.config.page_timeout
+            )
             return await self._detect_state()
 
         else:

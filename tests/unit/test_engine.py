@@ -542,6 +542,100 @@ class TestGetResultMessage:
         assert engine._get_result_message() == "Cancellation failed"
 
 
+class TestHandleStateLoginRequired:
+    """Tests for LOGIN_REQUIRED state handling."""
+
+    @pytest.mark.asyncio
+    async def test_login_required_navigates_to_entry_url_after_auth(
+        self, tmp_path: Path
+    ) -> None:
+        """After LOGIN_REQUIRED auth, engine should navigate to entry_url."""
+        from unittest.mock import AsyncMock
+
+        from subterminator.core.ai import HeuristicInterpreter
+        from subterminator.core.engine import CancellationEngine
+        from subterminator.services.netflix import NetflixService
+        from subterminator.utils.session import SessionLogger
+
+        # Setup
+        service = NetflixService()
+        mock_browser = AsyncMock()
+        mock_browser.url = AsyncMock(return_value="https://www.netflix.com/account")
+        mock_browser.text_content = AsyncMock(return_value="Account Cancel membership")
+        mock_browser.screenshot = AsyncMock(return_value=b"fake_screenshot")
+
+        session = SessionLogger(
+            output_dir=tmp_path, service="netflix", target="test@example.com"
+        )
+        config = AppConfig(anthropic_api_key=None, output_dir=tmp_path)
+
+        # Create engine with mocked input callback to simulate user completing login
+        engine = CancellationEngine(
+            service=service,
+            browser=mock_browser,
+            heuristic=HeuristicInterpreter(),
+            ai=None,
+            session=session,
+            config=config,
+            input_callback=lambda checkpoint, timeout: "",  # Simulate Enter press
+        )
+
+        # Call _handle_state for LOGIN_REQUIRED
+        await engine._handle_state(State.LOGIN_REQUIRED)
+
+        # Verify navigation was called with entry_url after auth checkpoint
+        mock_browser.navigate.assert_called_once_with(
+            service.entry_url, config.page_timeout
+        )
+
+
+class TestHandleStateUnknown:
+    """Tests for UNKNOWN state handling."""
+
+    @pytest.mark.asyncio
+    async def test_unknown_state_navigates_to_entry_url_for_recovery(
+        self, tmp_path: Path
+    ) -> None:
+        """UNKNOWN state should navigate to entry_url before re-detection."""
+        from unittest.mock import AsyncMock
+
+        from subterminator.core.ai import HeuristicInterpreter
+        from subterminator.core.engine import CancellationEngine
+        from subterminator.services.netflix import NetflixService
+        from subterminator.utils.session import SessionLogger
+
+        # Setup
+        service = NetflixService()
+        mock_browser = AsyncMock()
+        mock_browser.url = AsyncMock(return_value="https://www.netflix.com/account")
+        mock_browser.text_content = AsyncMock(return_value="Account Cancel membership")
+        mock_browser.screenshot = AsyncMock(return_value=b"fake_screenshot")
+
+        session = SessionLogger(
+            output_dir=tmp_path, service="netflix", target="test@example.com"
+        )
+        config = AppConfig(anthropic_api_key=None, output_dir=tmp_path)
+
+        # Create engine with mocked input callback
+        engine = CancellationEngine(
+            service=service,
+            browser=mock_browser,
+            heuristic=HeuristicInterpreter(),
+            ai=None,
+            session=session,
+            config=config,
+            input_callback=lambda checkpoint, timeout: "",  # Simulate Enter press
+        )
+
+        # Call _handle_state for UNKNOWN
+        await engine._handle_state(State.UNKNOWN)
+
+        # Verify navigation was called with entry_url after human checkpoint
+        mock_browser.navigate.assert_called_once_with(
+            service.entry_url, config.page_timeout
+        )
+
+
 class TestModuleExports:
     """Tests for module exports."""
 

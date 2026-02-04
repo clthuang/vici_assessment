@@ -119,10 +119,11 @@ def cancel(
             raise typer.Exit(code=3)
         selected_service = service_info.id
     elif is_interactive(no_input):
-        selected_service = select_service(plain=plain)
-        if selected_service is None:
+        selected = select_service(plain=plain)
+        if selected is None:
             typer.echo("Cancelled.")
             raise typer.Exit(code=2)
+        selected_service = selected
     else:
         typer.echo("Error: --service required in non-interactive mode.")
         typer.echo("Usage: subterminator cancel --service <name>")
