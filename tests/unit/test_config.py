@@ -65,8 +65,9 @@ class TestConfigLoader:
 
     def test_load_with_default_values(self) -> None:
         """Test loading config with default values when env vars not set."""
-        with patch.dict(os.environ, {}, clear=True):
-            config = ConfigLoader.load()
+        with patch("subterminator.utils.config.load_dotenv"):  # Skip .env file
+            with patch.dict(os.environ, {}, clear=True):
+                config = ConfigLoader.load()
 
         assert config.anthropic_api_key is None
         assert config.output_dir == Path("./output")

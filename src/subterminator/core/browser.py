@@ -5,6 +5,8 @@ anti-detection features via playwright-stealth. It implements the BrowserProtoco
 for use in subscription cancellation flows.
 """
 
+import subprocess
+import time
 from pathlib import Path
 from typing import Any, cast
 
@@ -23,6 +25,71 @@ from subterminator.utils.exceptions import (
     NavigationError,
     ProfileLoadError,
 )
+
+
+def launch_system_chrome(port: int = 9222) -> str:
+    """Launch system Chrome with remote debugging enabled.
+
+    Uses a project-local profile directory (.chrome-profile/) to ensure
+    Chrome launches as a new instance even if Chrome is already running.
+    The profile persists between runs to preserve login state.
+
+    Args:
+        port: The port for Chrome DevTools Protocol. Defaults to 9222.
+
+    Returns:
+        CDP URL to connect to (e.g., "http://localhost:9222").
+
+    Raises:
+        RuntimeError: If Chrome installation cannot be found or fails to start.
+    """
+    import urllib.request
+
+    chrome_paths = [
+        "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",  # macOS
+        "google-chrome",  # Linux
+        "chrome",  # Linux alternative
+    ]
+
+    # Use project-local profile directory for persistence and isolation
+    profile_dir = Path.cwd() / ".chrome-profile"
+    profile_dir.mkdir(exist_ok=True)
+
+    for path in chrome_paths:
+        try:
+            subprocess.Popen(
+                [
+                    path,
+                    f"--remote-debugging-port={port}",
+                    f"--user-data-dir={profile_dir}",
+                    "--no-first-run",
+                    "--no-default-browser-check",
+                ],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+            )
+
+            # Wait for Chrome to start and verify it's listening
+            cdp_url = f"http://localhost:{port}"
+            for _ in range(10):  # Try for up to 5 seconds
+                time.sleep(0.5)
+                try:
+                    urllib.request.urlopen(f"{cdp_url}/json/version", timeout=1)
+                    return cdp_url
+                except Exception:
+                    continue
+
+            raise RuntimeError(
+                f"Chrome started but not responding on {cdp_url}. "
+                "Try closing Chrome windows from .chrome-profile and retry."
+            )
+        except FileNotFoundError:
+            continue
+
+    raise RuntimeError(
+        "Could not find Chrome installation. "
+        "Use --use-chromium to use Playwright's bundled Chromium instead."
+    )
 
 
 class PlaywrightBrowser:

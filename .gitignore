@@ -49,6 +49,7 @@ dmypy.json
 output/
 mock_pages/netflix/assets/*.png
 *.log
+.chrome-profile/
 
 # OS
 .DS_Store

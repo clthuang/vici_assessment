@@ -4,6 +4,8 @@ import os
 from dataclasses import dataclass
 from pathlib import Path
 
+from dotenv import load_dotenv
+
 from subterminator.utils.exceptions import ConfigurationError
 
 
@@ -31,6 +33,8 @@ class ConfigLoader:
         Raises:
             ConfigurationError: If required configuration is missing or invalid.
         """
+        load_dotenv()  # Load .env file if present
+
         output_dir = Path(os.environ.get("SUBTERMINATOR_OUTPUT", "./output"))
 
         return AppConfig(

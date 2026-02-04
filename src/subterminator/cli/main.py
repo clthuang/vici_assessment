@@ -114,6 +114,11 @@ def cancel(
         "--profile-dir",
         help="Use persistent browser profile directory for session persistence",
     ),
+    use_chromium: bool = typer.Option(
+        False,
+        "--use-chromium",
+        help="Use Playwright's Chromium instead of system Chrome (for testing/CI)",
+    ),
 ) -> None:
     """Cancel a subscription service."""
     # Validate mutual exclusivity of browser options early (before browser init)
@@ -179,9 +184,22 @@ def cancel(
 
         # Create components
         service_obj = create_service(selected_service, target)
+
+        # Determine browser mode: default to system Chrome unless --use-chromium
+        effective_cdp_url = cdp_url
+        if not use_chromium and not cdp_url and not profile_dir:
+            # Default: launch system Chrome with remote debugging
+            from subterminator.core.browser import launch_system_chrome
+
+            if verbose:
+                console.print("[dim]Launching system Chrome...[/dim]")
+            effective_cdp_url = launch_system_chrome()
+            if verbose:
+                console.print(f"[dim]Connected via {effective_cdp_url}[/dim]")
+
         browser = PlaywrightBrowser(
             headless=headless,
-            cdp_url=cdp_url,
+            cdp_url=effective_cdp_url,
             user_data_dir=profile_dir,
         )
         heuristic = HeuristicInterpreter()
