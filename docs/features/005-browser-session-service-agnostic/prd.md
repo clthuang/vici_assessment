@@ -3,7 +3,7 @@
 **Status:** Draft
 **Created:** 2026-02-04
 **Updated:** 2026-02-04
-**Type:** Architecture Investigation & Refactoring Plan
+**Type:** Feature PRD
 
 ## 1. Problem Statement
 
@@ -20,24 +20,70 @@ Our current SubTerminator implementation has several limitations:
 3. How do we make element selection more robust?
 4. How do we generalize beyond Netflix?
 
-## 2. Research Summary
+## 2. User Stories
 
-### 2.1 Evaluated Browser Automation Solutions
+### US-1: Connect to Existing Browser Session
+**As a** regular user who is already logged into Netflix in my browser,
+**I want** SubTerminator to connect to my existing browser session,
+**So that** I don't have to log in again and can start cancellation immediately.
+
+**Acceptance Criteria:**
+- [ ] User can start Chrome with `--remote-debugging-port=9222`
+- [ ] User can run `subterminator cancel --cdp-url http://localhost:9222`
+- [ ] SubTerminator reuses the existing logged-in session
+- [ ] Clear error message if Chrome is not running or port is wrong
+
+### US-2: Persistent Login State
+**As a** power user who runs SubTerminator frequently,
+**I want** my login state to persist between runs,
+**So that** I only need to log in once and subsequent runs are faster.
+
+**Acceptance Criteria:**
+- [ ] User can specify `--profile-dir ~/.subterminator/chrome-profile`
+- [ ] First run: user logs in, state saved to profile directory
+- [ ] Subsequent runs: already logged in, skips authentication checkpoint
+- [ ] Profile directory auto-created if missing
+
+### US-3: Robust Element Selection
+**As a** user who experiences automation failures after Netflix UI updates,
+**I want** element selection to fall back to accessibility-based methods,
+**So that** minor UI changes don't break the cancellation flow.
+
+**Acceptance Criteria:**
+- [ ] CSS selectors tried first (current behavior)
+- [ ] If CSS fails, ARIA role/name fallback is used
+- [ ] Netflix selectors updated with ARIA fallbacks
+- [ ] Works on mock pages with different selectors
+
+### US-4: Multi-Service Architecture (Foundation)
+**As a** developer extending SubTerminator to other services,
+**I want** the engine and CLI to be service-agnostic,
+**So that** I can add new services without modifying core code.
+
+**Acceptance Criteria:**
+- [ ] Engine accepts any `ServiceProtocol` implementation
+- [ ] CLI uses service factory instead of hardcoded Netflix
+- [ ] Checkpoint messages are service-agnostic
+- [ ] Adding a new service only requires creating a new service class
+
+## 3. Research Summary
+
+### 3.1 Evaluated Browser Automation Solutions
 
 | Tool | Architecture | Maturity | Suitability |
 |------|--------------|----------|-------------|
-| **OpenClaw** | Snapshot-based refs, Extension Relay | Unstable (crashes, security CVE) | Good concepts, risky for production |
-| **Browser-Use** | Hybrid DOM + Vision, Python | Active development | Good candidate for fallback |
-| **Skyvern** | Vision-only (no selectors) | Production-ready | Best for form-filling, complex infra |
+| **OpenClaw** | Snapshot-based refs, Extension Relay | Active development, reported stability issues (see GitHub issues) | Good concepts, but stability concerns for production |
+| **Browser-Use** | Hybrid DOM + Vision, Python | Active development | Good candidate for future fallback |
+| **Skyvern** | Vision-only (no selectors) | Production-ready | Best for form-filling, complex infrastructure |
 | **Stagehand** | AI-adaptive SDK | Newer, simpler | Alternative option |
 
-*GitHub star counts not independently verified - should not be primary decision criterion.*
+*Note: Tool assessments based on GitHub repository reviews conducted 2026-02-04. Stability assessments are subjective judgments, not independently verified.*
 
-### 2.2 Key Architectural Insights
+### 3.2 Key Architectural Insights
 
-#### From OpenClaw: Accessibility Tree > DOM Selectors
+#### Accessibility Tree vs DOM Selectors
 
-OpenClaw and modern tools use the **Accessibility Tree** instead of CSS selectors:
+Modern browser automation tools increasingly use the **Accessibility Tree** instead of CSS selectors:
 
 | Traditional | Accessibility-Based |
 |-------------|---------------------|
@@ -45,18 +91,15 @@ OpenClaw and modern tools use the **Accessibility Tree** instead of CSS selector
 | `.btn.btn-primary` | `button "Submit"` |
 | Breaks on class changes | Survives restructuring |
 
-**Key benefit:** 80-90% smaller token usage, stable across layout changes.
+**Claimed benefit:** Accessibility tree is significantly smaller than full DOM, reducing token usage for AI-based analysis. *Assumption: 80-90% reduction claimed by Stagehand documentation - needs verification during implementation.*
 
-#### From OpenClaw: Connecting to Existing Browser Sessions
+#### Connecting to Existing Browser Sessions
 
-OpenClaw's Extension Relay mode enables controlling a user's existing logged-in Chrome:
-- No re-authentication needed
-- Access to existing cookies/sessions
-- User clicks extension icon to "attach" tab
+OpenClaw's Extension Relay mode demonstrates the value of connecting to existing logged-in browsers. **We can achieve this with Playwright's CDP connection** without external dependencies.
 
-**We can achieve this with Playwright's CDP connection** (no OpenClaw dependency).
+### 3.3 Current Generalization Analysis
 
-### 2.3 Current Generalization Analysis
+*Methodology: Scores represent subjective assessment of code abstraction level. 10 = fully abstract with no service-specific code, 5 = requires minor changes for new service, 1 = completely hardcoded.*
 
 | Component | Score | Issue |
 |-----------|-------|-------|
@@ -71,206 +114,104 @@ OpenClaw's Extension Relay mode enables controlling a user's existing logged-in 
 
 **Overall: 6.5/10** - Good foundation, critical hardcodes blocking expansion.
 
-## 3. Proposed Improvements
+## 4. Proposed Improvements
 
-### 3.1 Browser Session Reuse (CDP Connection)
+### 4.1 Browser Session Reuse (CDP Connection)
 
 **Problem:** Users must log into Netflix every run.
 
-**Solution:** Add CDP connection support to `PlaywrightBrowser`:
-
-```python
-async def launch(self, cdp_url: str | None = None, user_data_dir: str | None = None) -> None:
-    """Launch browser or connect to existing via CDP.
-
-    Args:
-        cdp_url: Connect to existing Chrome (e.g., "http://localhost:9222")
-        user_data_dir: Use persistent browser profile for session persistence
-    """
-    self._playwright = await async_playwright().start()
-
-    if cdp_url:
-        # Connect to user's existing Chrome
-        self._browser = await self._playwright.chromium.connect_over_cdp(cdp_url)
-        contexts = self._browser.contexts
-        self._page = contexts[0].pages[0] if contexts and contexts[0].pages else await contexts[0].new_page()
-    elif user_data_dir:
-        # Persistent profile (saves login state between runs)
-        context = await self._playwright.chromium.launch_persistent_context(
-            user_data_dir, headless=self.headless
-        )
-        self._page = context.pages[0] if context.pages else await context.new_page()
-    else:
-        # Current behavior - new instance
-        self._browser = await self._playwright.chromium.launch(headless=self.headless)
-        self._page = await self._browser.new_page()
-        stealth = Stealth()
-        await stealth.apply_stealth_async(self._page)
-```
+**Solution:** Add CDP connection support to `PlaywrightBrowser.launch()`:
+- `cdp_url` parameter to connect to existing Chrome
+- `user_data_dir` parameter for persistent profiles
+- Backward compatible: default behavior unchanged
 
 **User workflow options:**
 1. **CDP:** Start Chrome with `--remote-debugging-port=9222`, run SubTerminator with `--cdp-url`
 2. **Persistent:** First run logs in, subsequent runs reuse saved session
 
-### 3.2 Accessibility-Based Element Selection (ARIA Fallback)
+### 4.2 Accessibility-Based Element Selection (ARIA Fallback)
 
 **Problem:** CSS selectors break when Netflix changes class names/attributes.
 
 **Solution:** Add ARIA-based fallback to `PlaywrightBrowser.click()`:
+- Accept optional `fallback_role: tuple[str, str]` parameter
+- CSS selectors tried first (preserves current behavior)
+- ARIA role/name used if all CSS selectors fail
+- Netflix selectors updated with role fallbacks
 
-```python
-async def click(
-    self,
-    selector: str | list[str],
-    fallback_role: tuple[str, str] | None = None
-) -> None:
-    """Click element. Falls back to accessibility role if selectors fail.
-
-    Args:
-        selector: CSS selector(s) to try
-        fallback_role: (role, name) for accessibility-based fallback
-                       e.g., ("button", "Cancel Membership")
-    """
-    # Try CSS selectors first (current behavior)
-    selectors = [selector] if isinstance(selector, str) else selector
-    for sel in selectors:
-        try:
-            element = await self._page.wait_for_selector(sel, timeout=5000)
-            if element:
-                await element.scroll_into_view_if_needed()
-                await element.click()
-                return
-        except Exception:
-            continue
-
-    # Fallback to accessibility-based selection
-    if fallback_role:
-        role, name = fallback_role
-        try:
-            await self._page.get_by_role(role, name=name).click()
-            return
-        except Exception:
-            pass
-
-    raise ElementNotFound(f"Element not found: selectors={selectors}, role={fallback_role}")
-```
-
-**Service selector format update:**
-```python
-SELECTORS = {
-    "cancel_link": {
-        "css": ["[data-uia='action-cancel-membership']"],
-        "role": ("link", "Cancel Membership"),
-    },
-    "finish_button": {
-        "css": ["[data-uia='confirm-cancel-btn']"],
-        "role": ("button", "Finish Cancellation"),
-    },
-}
-```
-
-### 3.3 Service-Agnostic Refactoring
+### 4.3 Service-Agnostic Refactoring
 
 **Problem:** Engine and CLI hardcode `NetflixService`.
 
-**Solution:** Two changes:
+**Solution:**
+1. **Engine:** Change type hint from `NetflixService` to `ServiceProtocol`
+2. **Factory:** Create `create_service(service_id, target)` function
+3. **CLI:** Use factory instead of direct instantiation
+4. **Messages:** Make checkpoint prompts service-agnostic
 
-#### 3.3.1 Engine Type Fix
+## 5. Implementation Plan
 
-```python
-# engine.py - Change line 70
-# FROM:
-def __init__(self, service: NetflixService, ...):
+*Note: Estimates assume developer familiar with Playwright and the codebase. Subject to refinement during design phase.*
 
-# TO:
-def __init__(self, service: ServiceProtocol, ...):
-```
+### Phase 1: Browser Improvements
 
-Also remove `from subterminator.services.netflix import NetflixService` import.
+| Task | Effort | Impact | Dependencies |
+|------|--------|--------|--------------|
+| Add CDP connection to `PlaywrightBrowser` | 2 hours | Eliminates re-login friction | None |
+| Add ARIA fallback to `click()` | 2 hours | Survives UI changes | None |
+| Add `--cdp-url` CLI flag | 30 min | User-facing feature | CDP connection |
+| Update Netflix selectors with role fallbacks | 1 hour | Immediate robustness | ARIA fallback |
 
-#### 3.3.2 Service Factory Pattern
+**Total: ~5-6 hours** | *Phase 1 tasks can be parallelized (CDP + ARIA independent)*
 
-```python
-# services/__init__.py or registry.py
-from subterminator.services.netflix import NetflixService
-# from subterminator.services.spotify import SpotifyService  # Future
+### Phase 2: Service Generalization
 
-SERVICE_FACTORY: dict[str, Callable[[str], ServiceProtocol]] = {
-    "netflix": lambda target: NetflixService(target=target),
-    # "spotify": lambda target: SpotifyService(target=target),  # Future
-}
+| Task | Effort | Impact | Dependencies |
+|------|--------|--------|--------------|
+| Fix engine type annotation | 10 min | Removes type coupling | None |
+| Create service factory | 30 min | Enables dynamic service creation | None |
+| Update CLI to use factory | 30 min | Service selection works | Factory |
+| Make checkpoint messages generic | 30 min | No "Netflix" in prompts | None |
 
-def create_service(service_id: str, target: str = "live") -> ServiceProtocol:
-    """Factory function to create service instances."""
-    if service_id not in SERVICE_FACTORY:
-        raise ValueError(f"Unknown service: {service_id}")
-    return SERVICE_FACTORY[service_id](target)
-```
+**Total: ~2 hours** | *Phase 2 depends on Phase 1 completion for testing*
 
-#### 3.3.3 CLI Update
+### Phase 3: Multi-Service Expansion (Future, Out of Scope)
 
-```python
-# cli/main.py - Replace hardcoded instantiation
-# FROM:
-service_obj = NetflixService(target=target)
+Not included in this feature. Foundation only.
 
-# TO:
-from subterminator.services import create_service
-service_obj = create_service(selected_service, target=target)
-```
+## 6. Success Criteria (Measurable)
 
-## 4. Implementation Plan
+| Criterion | Metric | Target |
+|-----------|--------|--------|
+| **CDP Connection** | Connection success rate | 100% when Chrome running with correct port |
+| **CDP Latency** | Time to connect | < 5 seconds |
+| **ARIA Fallback** | Success rate when CSS fails | 90%+ on mock pages with modified selectors |
+| **Backward Compatibility** | Existing test pass rate | 100% (all ~420 tests) |
+| **New Test Coverage** | New tests added | 10+ tests for CDP, ARIA, factory |
+| **Service Abstraction** | Engine accepts mock service | Mock ServiceProtocol works in tests |
 
-### Phase 1: Browser Improvements (Recommended for Assessment)
+## 7. Risks and Mitigations
 
-| Task | Effort | Impact |
-|------|--------|--------|
-| Add CDP connection to `PlaywrightBrowser` | 2 hours | Eliminates re-login friction |
-| Add ARIA fallback to `click()` | 2 hours | Survives UI changes |
-| Add `--cdp-url` CLI flag | 30 min | User-facing feature |
-| Update Netflix selectors with role fallbacks | 1 hour | Immediate robustness |
+| Risk | Likelihood | Impact | Mitigation |
+|------|------------|--------|------------|
+| **CDP Security Exposure** | Medium | High | CDP only binds to localhost by default. Document security best practices. Do not expose to network. |
+| **Browser Version Compatibility** | Low | Medium | Test with Chrome 100+. Use Playwright's CDP abstraction which handles version differences. |
+| **ARIA Labels Vary by Locale** | Medium | Medium | Use English locale for initial implementation. Note limitation in docs. Future: locale-aware selectors. |
+| **Session State Corruption** | Low | Medium | Graceful handling if session invalid. Fall back to new browser. Clear error messages. |
+| **Stealth Mode Not Applied** | Low | Low | When connecting via CDP, user's existing browser fingerprint is used. Document this behavior. |
+| **Breaking Existing Flows** | Low | High | All existing tests must pass. No changes to default behavior. Feature flags for new features. |
 
-**Total: ~5-6 hours**
+## 8. Out of Scope
 
-### Phase 2: Service Generalization (Post-Assessment)
-
-| Task | Effort | Impact |
-|------|--------|--------|
-| Fix engine type annotation | 10 min | Removes type coupling |
-| Create service factory | 30 min | Enables dynamic service creation |
-| Update CLI to use factory | 30 min | Service selection works |
-| Make checkpoint messages generic | 30 min | No "Netflix" in prompts |
-
-**Total: ~2 hours**
-
-### Phase 3: Multi-Service Expansion (Future)
-
-| Task | Effort | Impact |
-|------|--------|--------|
-| Create SpotifyService | 2 hours | Second service support |
-| Create Spotify mock pages | 2 hours | Testing capability |
-| Create HuluService | 2 hours | Third service |
-| Tune heuristics per service | 2 hours | Faster detection |
-
-**Total: ~8 hours per service**
-
-## 5. Success Criteria
-
-1. **Session Reuse**: User can connect to existing logged-in Chrome via CDP
-2. **Selector Resilience**: When CSS selectors fail, ARIA fallback finds element
-3. **Service Agnostic**: Engine accepts any `ServiceProtocol` implementation
-4. **No Regression**: All existing tests pass
-5. **Testable**: Mock pages can test ARIA fallback with modified selectors
-
-## 6. Out of Scope
-
-- Full OpenClaw integration (stability concerns)
-- Full Skyvern integration (infrastructure complexity)
-- Browser-Use integration (can add later as additional fallback)
+- Full OpenClaw integration (stability concerns based on GitHub issue reports)
+- Full Skyvern integration (infrastructure complexity: requires PostgreSQL)
+- Browser-Use integration (can add later as additional fallback tier)
 - Proxy rotation / anti-bot features
 - CAPTCHA solving
+- Multi-service implementation (only foundation/abstraction in this feature)
+- Non-English locale support for ARIA selectors
 
-## 7. Trade-off Analysis
+## 9. Trade-off Analysis
 
 ### Purpose-Built vs General-Purpose Agents
 
@@ -285,13 +226,31 @@ service_obj = create_service(selected_service, target=target)
 
 **Conclusion:** Purpose-built with ARIA fallback is the right balance for now. Can layer in Browser-Use as a third-tier fallback later if needed.
 
-## 8. References
+## 10. Testing Strategy
 
-- [Playwright ARIA Snapshots](https://playwright.dev/docs/aria-snapshots)
-- [Playwright Locators - getByRole](https://playwright.dev/docs/locators#locate-by-role)
+### Unit Tests
+- CDP connection logic (mocked Playwright)
+- Persistent profile logic (mocked context)
+- ARIA fallback behavior (CSS fail → ARIA succeed)
+- Service factory (known and unknown IDs)
+- Engine with mock ServiceProtocol
+
+### Integration Tests
+- CLI with `--cdp-url` flag
+- CLI with `--profile-dir` flag
+- Mock server with modified selectors (ARIA fallback path)
+
+### Manual Testing Checklist
+- [ ] Start Chrome with remote debugging, connect via CDP
+- [ ] Verify existing Netflix session is accessible
+- [ ] Test profile persistence across runs
+- [ ] Test ARIA fallback with temporarily broken selector
+
+## 11. References
+
 - [Playwright CDP Connection](https://playwright.dev/docs/api/class-browsertype#browser-type-connect-over-cdp)
-- [OpenClaw Browser Documentation](https://docs.openclaw.ai/tools/browser)
-- [Browser-Use GitHub](https://github.com/browser-use/browser-use)
-- [Skyvern GitHub](https://github.com/Skyvern-AI/skyvern)
+- [Playwright Persistent Context](https://playwright.dev/docs/api/class-browsertype#browser-type-launch-persistent-context)
+- [Playwright getByRole](https://playwright.dev/docs/locators#locate-by-role)
+- [Playwright ARIA Snapshots](https://playwright.dev/docs/aria-snapshots)
 - [CDP Accessibility Domain](https://chromedevtools.github.io/devtools-protocol/tot/Accessibility/)
 - [Puppetaria: Accessibility-first Automation](https://developer.chrome.com/blog/puppetaria/)
