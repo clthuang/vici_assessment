@@ -1,5 +1,6 @@
 """Integration tests for cancel command with interactive service selection."""
 
+import re
 from unittest.mock import MagicMock, patch
 
 from typer.testing import CliRunner
@@ -7,6 +8,11 @@ from typer.testing import CliRunner
 from subterminator.cli.main import app
 
 runner = CliRunner()
+
+
+def strip_ansi(text: str) -> str:
+    """Remove ANSI escape codes from text."""
+    return re.sub(r"\x1b\[[0-9;]*m", "", text)
 
 
 class TestCancelInteractiveMode:
@@ -107,13 +113,13 @@ class TestCLIBrowserFlags:
         """--help should show --cdp-url flag."""
         result = runner.invoke(app, ["cancel", "--help"])
         assert result.exit_code == 0
-        assert "--cdp-url" in result.output
+        assert "--cdp-url" in strip_ansi(result.output)
 
     def test_help_shows_profile_dir_flag(self) -> None:
         """--help should show --profile-dir flag."""
         result = runner.invoke(app, ["cancel", "--help"])
         assert result.exit_code == 0
-        assert "--profile-dir" in result.output
+        assert "--profile-dir" in strip_ansi(result.output)
 
     def test_mutual_exclusivity_error(self) -> None:
         """Should error when both --cdp-url and --profile-dir provided."""
