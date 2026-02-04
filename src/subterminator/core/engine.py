@@ -13,6 +13,7 @@ from subterminator.core.protocols import (
     AIInterpreterProtocol,
     BrowserProtocol,
     CancellationResult,
+    ServiceProtocol,
     State,
 )
 
@@ -20,9 +21,10 @@ from subterminator.core.protocols import (
 # future use for strict transition validation. Currently, the engine manages states
 # directly for simplicity. The state machine can be integrated if stricter validation
 # is needed (see states.py for valid transitions).
-from subterminator.services.netflix import NetflixService
+from subterminator.services.selectors import SelectorConfig
 from subterminator.utils.config import AppConfig
 from subterminator.utils.exceptions import (
+    ElementNotFound,
     HumanInterventionRequired,
     SubTerminatorError,
     TransientError,
@@ -67,7 +69,7 @@ class CancellationEngine:
 
     def __init__(
         self,
-        service: NetflixService,
+        service: ServiceProtocol,
         browser: BrowserProtocol,
         heuristic: HeuristicInterpreter,
         ai: AIInterpreterProtocol | None,
@@ -102,6 +104,18 @@ class CancellationEngine:
         self.dry_run = False
         self._current_state = State.START
         self._step = 0
+
+    async def _click_selector(self, selector: SelectorConfig) -> None:
+        """Click an element using SelectorConfig with CSS and optional ARIA fallback.
+
+        Args:
+            selector: SelectorConfig with css list and optional aria tuple.
+        """
+        await self.browser.click(
+            selector.css,
+            fallback_role=selector.aria,
+            timeout=self.config.element_timeout,
+        )
 
     async def run(self, dry_run: bool = False) -> CancellationResult:
         """Execute the cancellation flow.
@@ -166,10 +180,14 @@ class CancellationEngine:
 
         elif state == State.LOGIN_REQUIRED:
             await self._human_checkpoint("AUTH", self.config.auth_timeout)
+            # Navigate to entry URL after login to ensure correct page for detection
+            await self.browser.navigate(
+                self.service.entry_url, self.config.page_timeout
+            )
             return await self._detect_state()
 
         elif state == State.ACCOUNT_ACTIVE:
-            await self.browser.click(self.service.selectors.cancel_link)
+            await self._click_selector(self.service.selectors.cancel_link)
             await asyncio.sleep(1)  # Wait for page transition
             return await self._detect_state()
 
@@ -183,7 +201,7 @@ class CancellationEngine:
             return State.FAILED
 
         elif state == State.RETENTION_OFFER:
-            await self.browser.click(self.service.selectors.decline_offer)
+            await self._click_selector(self.service.selectors.decline_offer)
             await asyncio.sleep(1)
             return await self._detect_state()
 
@@ -198,7 +216,7 @@ class CancellationEngine:
                 )
                 return State.COMPLETE
             await self._human_checkpoint("CONFIRM", self.config.confirm_timeout)
-            await self.browser.click(self.service.selectors.confirm_cancel)
+            await self._click_selector(self.service.selectors.confirm_cancel)
             await asyncio.sleep(2)
             return await self._detect_state()
 
@@ -211,6 +229,10 @@ class CancellationEngine:
                     return ai_result.state
             # Ask human
             await self._human_checkpoint("UNKNOWN", self.config.auth_timeout)
+            # Navigate to entry URL after manual intervention for recovery
+            await self.browser.navigate(
+                self.service.entry_url, self.config.page_timeout
+            )
             return await self._detect_state()
 
         else:
@@ -278,12 +300,12 @@ class CancellationEngine:
         """
         messages = {
             "AUTH": (
-                "Please log in to Netflix in the browser, "
+                f"Please log in to {self.service.config.name} in the browser, "
                 "then press Enter to continue..."
             ),
             "CONFIRM": (
-                "WARNING: This will cancel your subscription. "
-                "Type 'confirm' to proceed: "
+                f"WARNING: This will cancel your {self.service.config.name} "
+                "subscription. Type 'confirm' to proceed: "
             ),
             "UNKNOWN": (
                 "Could not detect page state. "
@@ -310,12 +332,10 @@ class CancellationEngine:
         Survey completion is optional - if it fails, we log and continue
         since the cancellation can still proceed.
         """
-        from subterminator.utils.exceptions import ElementNotFound
-
         try:
-            await self.browser.click(self.service.selectors.survey_option)
+            await self._click_selector(self.service.selectors.survey_option)
             await asyncio.sleep(0.5)
-            await self.browser.click(self.service.selectors.survey_submit)
+            await self._click_selector(self.service.selectors.survey_submit)
             await asyncio.sleep(1)
         except (ElementNotFound, TimeoutError) as e:
             # Survey completion is optional, log and continue

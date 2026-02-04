@@ -8,7 +8,6 @@ Tests cover:
 """
 
 from pathlib import Path
-from typing import Any
 
 import pytest
 
@@ -17,6 +16,7 @@ from subterminator.core.protocols import (
     AIInterpreterProtocol,
     BrowserProtocol,
     CancellationResult,
+    ServiceConfigProtocol,
     ServiceProtocol,
     State,
 )
@@ -214,7 +214,12 @@ class TestBrowserProtocol:
             async def navigate(self, url: str, timeout: int = 30000) -> None:
                 pass
 
-            async def click(self, selector: str | list[str]) -> None:
+            async def click(
+                self,
+                selector: str | list[str],
+                fallback_role: tuple[str, str] | None = None,
+                timeout: int = 5000,
+            ) -> None:
                 pass
 
             async def fill(self, selector: str, value: str) -> None:
@@ -240,9 +245,216 @@ class TestBrowserProtocol:
             async def close(self) -> None:
                 pass
 
+            @property
+            def is_cdp_connection(self) -> bool:
+                return False
+
         # This should pass type checking - MockBrowser satisfies BrowserProtocol
         browser: BrowserProtocol = MockBrowser()
         assert isinstance(browser, MockBrowser)
+
+    async def test_click_accepts_fallback_role_parameter(self) -> None:
+        """BrowserProtocol.click() should accept fallback_role parameter."""
+
+        class MockBrowserWithFallbackRole:
+            """Mock browser that uses fallback_role."""
+
+            last_click_fallback_role: tuple[str, str] | None = None
+
+            async def launch(self) -> None:
+                pass
+
+            async def navigate(self, url: str, timeout: int = 30000) -> None:
+                pass
+
+            async def click(
+                self,
+                selector: str | list[str],
+                fallback_role: tuple[str, str] | None = None,
+                timeout: int = 5000,
+            ) -> None:
+                self.last_click_fallback_role = fallback_role
+
+            async def fill(self, selector: str, value: str) -> None:
+                pass
+
+            async def select_option(
+                self, selector: str, value: str | None = None
+            ) -> None:
+                pass
+
+            async def screenshot(self, path: str | None = None) -> bytes:
+                return b""
+
+            async def html(self) -> str:
+                return ""
+
+            async def url(self) -> str:
+                return ""
+
+            async def text_content(self) -> str:
+                return ""
+
+            async def close(self) -> None:
+                pass
+
+            @property
+            def is_cdp_connection(self) -> bool:
+                return False
+
+        browser: BrowserProtocol = MockBrowserWithFallbackRole()
+        await browser.click("#btn", fallback_role=("button", "Submit"))
+        assert browser.last_click_fallback_role == ("button", "Submit")
+
+    async def test_click_accepts_timeout_parameter(self) -> None:
+        """BrowserProtocol.click() should accept timeout parameter."""
+
+        class MockBrowserWithTimeout:
+            """Mock browser that uses timeout."""
+
+            last_click_timeout: int = 0
+
+            async def launch(self) -> None:
+                pass
+
+            async def navigate(self, url: str, timeout: int = 30000) -> None:
+                pass
+
+            async def click(
+                self,
+                selector: str | list[str],
+                fallback_role: tuple[str, str] | None = None,
+                timeout: int = 5000,
+            ) -> None:
+                self.last_click_timeout = timeout
+
+            async def fill(self, selector: str, value: str) -> None:
+                pass
+
+            async def select_option(
+                self, selector: str, value: str | None = None
+            ) -> None:
+                pass
+
+            async def screenshot(self, path: str | None = None) -> bytes:
+                return b""
+
+            async def html(self) -> str:
+                return ""
+
+            async def url(self) -> str:
+                return ""
+
+            async def text_content(self) -> str:
+                return ""
+
+            async def close(self) -> None:
+                pass
+
+            @property
+            def is_cdp_connection(self) -> bool:
+                return False
+
+        browser: BrowserProtocol = MockBrowserWithTimeout()
+        await browser.click("#btn", timeout=10000)
+        assert browser.last_click_timeout == 10000
+
+    def test_is_cdp_connection_property(self) -> None:
+        """BrowserProtocol should have is_cdp_connection property."""
+
+        class MockCDPBrowser:
+            """Mock browser connected via CDP."""
+
+            async def launch(self) -> None:
+                pass
+
+            async def navigate(self, url: str, timeout: int = 30000) -> None:
+                pass
+
+            async def click(
+                self,
+                selector: str | list[str],
+                fallback_role: tuple[str, str] | None = None,
+                timeout: int = 5000,
+            ) -> None:
+                pass
+
+            async def fill(self, selector: str, value: str) -> None:
+                pass
+
+            async def select_option(
+                self, selector: str, value: str | None = None
+            ) -> None:
+                pass
+
+            async def screenshot(self, path: str | None = None) -> bytes:
+                return b""
+
+            async def html(self) -> str:
+                return ""
+
+            async def url(self) -> str:
+                return ""
+
+            async def text_content(self) -> str:
+                return ""
+
+            async def close(self) -> None:
+                pass
+
+            @property
+            def is_cdp_connection(self) -> bool:
+                return True
+
+        class MockManagedBrowser:
+            """Mock browser not connected via CDP."""
+
+            async def launch(self) -> None:
+                pass
+
+            async def navigate(self, url: str, timeout: int = 30000) -> None:
+                pass
+
+            async def click(
+                self,
+                selector: str | list[str],
+                fallback_role: tuple[str, str] | None = None,
+                timeout: int = 5000,
+            ) -> None:
+                pass
+
+            async def fill(self, selector: str, value: str) -> None:
+                pass
+
+            async def select_option(
+                self, selector: str, value: str | None = None
+            ) -> None:
+                pass
+
+            async def screenshot(self, path: str | None = None) -> bytes:
+                return b""
+
+            async def html(self) -> str:
+                return ""
+
+            async def url(self) -> str:
+                return ""
+
+            async def text_content(self) -> str:
+                return ""
+
+            async def close(self) -> None:
+                pass
+
+            @property
+            def is_cdp_connection(self) -> bool:
+                return False
+
+        cdp_browser: BrowserProtocol = MockCDPBrowser()
+        managed_browser: BrowserProtocol = MockManagedBrowser()
+
+        assert cdp_browser.is_cdp_connection is True
+        assert managed_browser.is_cdp_connection is False
 
 
 class TestAIInterpreterProtocol:
@@ -266,18 +478,42 @@ class TestAIInterpreterProtocol:
         assert result.state == State.UNKNOWN
 
 
+class TestServiceConfigProtocol:
+    """Tests for ServiceConfigProtocol compliance."""
+
+    def test_service_config_protocol_has_name_property(self) -> None:
+        """ServiceConfigProtocol should have name property."""
+
+        class MockConfig:
+            """Mock implementation of ServiceConfigProtocol."""
+
+            @property
+            def name(self) -> str:
+                return "test_service"
+
+        config: ServiceConfigProtocol = MockConfig()
+        assert config.name == "test_service"
+
+
 class TestServiceProtocol:
     """Tests for ServiceProtocol compliance."""
 
     def test_protocol_is_structural(self) -> None:
         """ServiceProtocol should work as structural typing."""
 
+        class MockConfig:
+            """Mock config that satisfies ServiceConfigProtocol."""
+
+            @property
+            def name(self) -> str:
+                return "test_service"
+
         class MockService:
             """Mock implementation of ServiceProtocol."""
 
             @property
-            def config(self) -> dict[str, Any]:
-                return {"name": "test_service"}
+            def config(self) -> ServiceConfigProtocol:
+                return MockConfig()
 
             @property
             def entry_url(self) -> str:
@@ -290,10 +526,66 @@ class TestServiceProtocol:
                     "confirm_buttons": ["#confirm", "#yes-confirm"],
                 }
 
+            @property
+            def service_id(self) -> str:
+                return "mock_service"
+
         service: ServiceProtocol = MockService()
         assert service.entry_url == "https://example.com/account"
-        assert service.config["name"] == "test_service"
+        assert service.config.name == "test_service"
         assert "cancel_button" in service.selectors
+        assert service.service_id == "mock_service"
+
+    def test_service_id_property(self) -> None:
+        """ServiceProtocol should have service_id property."""
+
+        class MockConfig:
+            """Mock config that satisfies ServiceConfigProtocol."""
+
+            @property
+            def name(self) -> str:
+                return "My Service"
+
+        class MockService:
+            """Mock implementation with service_id."""
+
+            @property
+            def config(self) -> ServiceConfigProtocol:
+                return MockConfig()
+
+            @property
+            def entry_url(self) -> str:
+                return "https://example.com"
+
+            @property
+            def selectors(self) -> dict[str, str | list[str]]:
+                return {}
+
+            @property
+            def service_id(self) -> str:
+                return "my_service_id"
+
+        service: ServiceProtocol = MockService()
+        assert service.service_id == "my_service_id"
+
+    def test_netflix_service_satisfies_updated_protocol(self) -> None:
+        """NetflixService should satisfy the updated ServiceProtocol."""
+        from subterminator.services.netflix import NetflixService
+
+        service = NetflixService()
+        # Verify it has all required properties
+        assert hasattr(service, "config")
+        assert hasattr(service, "entry_url")
+        assert hasattr(service, "selectors")
+        assert hasattr(service, "service_id")
+
+        # Verify the config has name property
+        assert hasattr(service.config, "name")
+        assert service.config.name == "Netflix"
+
+        # Verify service_id returns a string
+        assert isinstance(service.service_id, str)
+        assert service.service_id == "netflix"
 
 
 class TestModuleExports:

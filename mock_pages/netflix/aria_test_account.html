@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Account Settings - Netflix (ARIA Test)</title>
+  <link rel="stylesheet" href="assets/netflix.css">
+</head>
+<body>
+  <!-- Test Navigation -->
+  <nav class="test-nav">
+    [Mock Page - ARIA Test] No data-uia attributes - relies on ARIA fallback
+  </nav>
+
+  <!-- Header -->
+  <header class="header">
+    <a href="account.html" class="logo">NETFLIX</a>
+  </header>
+
+  <!-- Main Content -->
+  <main class="container">
+    <h1>Account</h1>
+
+    <!-- Membership & Billing Section -->
+    <section class="section">
+      <h2 class="text-gray" style="font-size: 14px; text-transform: uppercase; letter-spacing: 1px;">
+        Membership & Billing
+      </h2>
+
+      <div class="membership-info">
+        <div>
+          <div class="membership-label">Email</div>
+          <div class="membership-value">test@example.com</div>
+        </div>
+        <div class="membership-actions">
+          <a href="#">Change email</a>
+          <a href="#">Change password</a>
+        </div>
+      </div>
+
+      <div class="membership-info">
+        <div>
+          <div class="membership-value" style="color: var(--netflix-red);">
+            <!-- No data-uia attribute - relies on ARIA fallback -->
+            <a href="cancelplan_survey.html" class="link-red">
+              Cancel Membership
+            </a>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Cancellation Flow Elements (without data-uia) -->
+    <section class="section">
+      <h2>Cancellation Options</h2>
+
+      <!-- No data-uia attributes - ARIA fallback needed -->
+      <button>Continue to Cancel</button>
+
+      <div class="survey-options">
+        <label>
+          <input type="radio" name="reason" value="other"> Other
+        </label>
+      </div>
+
+      <button>Continue</button>
+      <button>Finish Cancellation</button>
+    </section>
+  </main>
+
+  <!-- Footer -->
+  <footer class="footer">
+    <p>Questions? Call 1-844-505-2993</p>
+    <p class="mt-20">[Mock Page for ARIA Fallback Testing]</p>
+  </footer>
+</body>
+</html>

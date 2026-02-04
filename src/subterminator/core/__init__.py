@@ -12,6 +12,7 @@ from subterminator.core.protocols import (
     AIInterpreterProtocol,
     BrowserProtocol,
     CancellationResult,
+    ServiceConfigProtocol,
     ServiceProtocol,
     State,
 )
@@ -27,6 +28,7 @@ __all__ = [
     "ClaudeInterpreter",
     "HeuristicInterpreter",
     "PlaywrightBrowser",
+    "ServiceConfigProtocol",
     "ServiceProtocol",
     "State",
     "with_retry",

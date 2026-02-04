@@ -102,11 +102,20 @@ class BrowserProtocol(Protocol):
         """
         ...
 
-    async def click(self, selector: str | list[str]) -> None:
+    async def click(
+        self,
+        selector: str | list[str],
+        fallback_role: tuple[str, str] | None = None,
+        timeout: int = 5000,
+    ) -> None:
         """Click an element matching the selector.
 
         Args:
             selector: CSS selector or list of selectors to try in order.
+            fallback_role: Optional ARIA role tuple (role, name) to try if CSS
+                selectors fail. Example: ("button", "Submit")
+            timeout: Maximum time to wait for element in milliseconds.
+                Defaults to 5000ms.
         """
         ...
 
@@ -167,6 +176,17 @@ class BrowserProtocol(Protocol):
         """Close the browser instance."""
         ...
 
+    @property
+    def is_cdp_connection(self) -> bool:
+        """Check if this browser is connected via CDP.
+
+        Returns:
+            True if connected to an existing browser via CDP
+            (Chrome DevTools Protocol), False if this is a managed
+            browser instance.
+        """
+        ...
+
 
 class AIInterpreterProtocol(Protocol):
     """Protocol for AI-based page interpretation.
@@ -188,6 +208,23 @@ class AIInterpreterProtocol(Protocol):
         ...
 
 
+class ServiceConfigProtocol(Protocol):
+    """Protocol for service configuration objects.
+
+    Implementations must provide at minimum a name property identifying
+    the service.
+    """
+
+    @property
+    def name(self) -> str:
+        """Get the service name.
+
+        Returns:
+            The human-readable name of the service (e.g., "Netflix").
+        """
+        ...
+
+
 class ServiceProtocol(Protocol):
     """Protocol for service-specific cancellation configurations.
 
@@ -196,11 +233,20 @@ class ServiceProtocol(Protocol):
     """
 
     @property
-    def config(self) -> dict[str, Any]:
+    def config(self) -> ServiceConfigProtocol:
         """Get the service configuration.
 
         Returns:
-            Dictionary containing service-specific configuration.
+            Configuration object satisfying ServiceConfigProtocol.
+        """
+        ...
+
+    @property
+    def service_id(self) -> str:
+        """Get the unique service identifier.
+
+        Returns:
+            A lowercase string identifier for the service (e.g., "netflix").
         """
         ...
 
@@ -214,11 +260,11 @@ class ServiceProtocol(Protocol):
         ...
 
     @property
-    def selectors(self) -> dict[str, str | list[str]]:
-        """Get the CSS selectors for UI elements.
+    def selectors(self) -> Any:
+        """Get the selectors for UI elements.
 
         Returns:
-            Dictionary mapping element names to CSS selectors.
-            Values can be single selectors or lists of fallback selectors.
+            Object with selector attributes (e.g., .cancel_link, .decline_offer).
+            Each attribute is a SelectorConfig with css and aria fields.
         """
         ...

@@ -6,25 +6,51 @@ from subterminator.services.netflix import (
     ServiceConfig,
     ServiceSelectors,
 )
+from subterminator.services.selectors import SelectorConfig
 
 
 class TestServiceSelectors:
     """Tests for ServiceSelectors dataclass."""
 
-    def test_selectors_initialization(self):
-        """Test ServiceSelectors can be initialized with all fields."""
+    def test_selectors_initialization_with_selector_config(self):
+        """Test ServiceSelectors can be initialized with SelectorConfig fields."""
         selectors = ServiceSelectors(
-            cancel_link=["selector1"],
-            decline_offer=["selector2"],
-            survey_option=["selector3"],
-            survey_submit=["selector4"],
-            confirm_cancel=["selector5"],
+            cancel_link=SelectorConfig(
+                css=["selector1"], aria=("link", "Cancel")
+            ),
+            decline_offer=SelectorConfig(
+                css=["selector2"], aria=("button", "Continue")
+            ),
+            survey_option=SelectorConfig(css=["selector3"], aria=None),
+            survey_submit=SelectorConfig(
+                css=["selector4"], aria=("button", "Submit")
+            ),
+            confirm_cancel=SelectorConfig(
+                css=["selector5"], aria=("button", "Confirm")
+            ),
         )
-        assert selectors.cancel_link == ["selector1"]
-        assert selectors.decline_offer == ["selector2"]
-        assert selectors.survey_option == ["selector3"]
-        assert selectors.survey_submit == ["selector4"]
-        assert selectors.confirm_cancel == ["selector5"]
+        assert isinstance(selectors.cancel_link, SelectorConfig)
+        assert isinstance(selectors.decline_offer, SelectorConfig)
+        assert isinstance(selectors.survey_option, SelectorConfig)
+        assert isinstance(selectors.survey_submit, SelectorConfig)
+        assert isinstance(selectors.confirm_cancel, SelectorConfig)
+
+    def test_each_selector_has_css_and_aria_attributes(self):
+        """Test each selector has .css and .aria attributes."""
+        selectors = ServiceSelectors(
+            cancel_link=SelectorConfig(css=["css1"], aria=("link", "Cancel")),
+            decline_offer=SelectorConfig(css=["css2"], aria=("button", "Decline")),
+            survey_option=SelectorConfig(css=["css3"], aria=None),
+            survey_submit=SelectorConfig(css=["css4"], aria=("button", "Submit")),
+            confirm_cancel=SelectorConfig(css=["css5"], aria=("button", "Confirm")),
+        )
+        # Each selector should have .css and .aria attributes
+        assert hasattr(selectors.cancel_link, "css")
+        assert hasattr(selectors.cancel_link, "aria")
+        assert selectors.cancel_link.css == ["css1"]
+        assert selectors.cancel_link.aria == ("link", "Cancel")
+        # Check aria can be None
+        assert selectors.survey_option.aria is None
 
 
 class TestServiceConfig:
@@ -33,11 +59,11 @@ class TestServiceConfig:
     def test_config_initialization(self):
         """Test ServiceConfig can be initialized with all fields."""
         selectors = ServiceSelectors(
-            cancel_link=[],
-            decline_offer=[],
-            survey_option=[],
-            survey_submit=[],
-            confirm_cancel=[],
+            cancel_link=SelectorConfig(css=["sel1"]),
+            decline_offer=SelectorConfig(css=["sel2"]),
+            survey_option=SelectorConfig(css=["sel3"]),
+            survey_submit=SelectorConfig(css=["sel4"]),
+            confirm_cancel=SelectorConfig(css=["sel5"]),
         )
         config = ServiceConfig(
             name="TestService",
@@ -90,45 +116,87 @@ class TestNetflixServiceSelectors:
     """Tests for NetflixService selectors."""
 
     def test_selectors_property_returns_service_selectors(self):
-        """Test selectors property returns ServiceSelectors instance."""
+        """Test selectors property returns ServiceSelectors instance (not dict)."""
         service = NetflixService()
         selectors = service.selectors
         assert isinstance(selectors, ServiceSelectors)
+        # Verify it's NOT a dict
+        assert not isinstance(selectors, dict)
+
+    def test_service_id_property_returns_netflix(self):
+        """Test service_id property returns 'netflix'."""
+        service = NetflixService()
+        assert service.service_id == "netflix"
 
     def test_cancel_link_selectors_configured(self):
-        """Test cancel link selectors are properly configured."""
+        """Test cancel link selectors are properly configured as SelectorConfig."""
         service = NetflixService()
         selectors = service.selectors
-        assert len(selectors.cancel_link) > 0
-        assert "[data-uia='action-cancel-membership']" in selectors.cancel_link
+        assert isinstance(selectors.cancel_link, SelectorConfig)
+        assert len(selectors.cancel_link.css) > 0
+        assert "[data-uia='action-cancel-membership']" in selectors.cancel_link.css
+
+    def test_cancel_link_has_aria_fallback(self):
+        """Test cancel link has ARIA fallback."""
+        service = NetflixService()
+        selectors = service.selectors
+        assert selectors.cancel_link.aria == ("link", "Cancel Membership")
 
     def test_decline_offer_selectors_configured(self):
-        """Test decline offer selectors are properly configured."""
+        """Test decline offer selectors are properly configured as SelectorConfig."""
         service = NetflixService()
         selectors = service.selectors
-        assert len(selectors.decline_offer) > 0
-        assert "[data-uia='continue-cancel-btn']" in selectors.decline_offer
+        assert isinstance(selectors.decline_offer, SelectorConfig)
+        assert len(selectors.decline_offer.css) > 0
+        assert "[data-uia='continue-cancel-btn']" in selectors.decline_offer.css
+
+    def test_decline_offer_has_aria_fallback(self):
+        """Test decline offer has ARIA fallback."""
+        service = NetflixService()
+        selectors = service.selectors
+        assert selectors.decline_offer.aria == ("button", "Continue to Cancel")
 
     def test_survey_option_selectors_configured(self):
-        """Test survey option selectors are properly configured."""
+        """Test survey option selectors are properly configured as SelectorConfig."""
         service = NetflixService()
         selectors = service.selectors
-        assert len(selectors.survey_option) > 0
-        assert "input[type='radio']" in selectors.survey_option
+        assert isinstance(selectors.survey_option, SelectorConfig)
+        assert len(selectors.survey_option.css) > 0
+        assert "input[type='radio']" in selectors.survey_option.css
+
+    def test_survey_option_has_no_aria_fallback(self):
+        """Test survey option has no ARIA fallback (radio buttons vary)."""
+        service = NetflixService()
+        selectors = service.selectors
+        assert selectors.survey_option.aria is None
 
     def test_survey_submit_selectors_configured(self):
-        """Test survey submit selectors are properly configured."""
+        """Test survey submit selectors are properly configured as SelectorConfig."""
         service = NetflixService()
         selectors = service.selectors
-        assert len(selectors.survey_submit) > 0
-        assert "[data-uia='continue-btn']" in selectors.survey_submit
+        assert isinstance(selectors.survey_submit, SelectorConfig)
+        assert len(selectors.survey_submit.css) > 0
+        assert "[data-uia='continue-btn']" in selectors.survey_submit.css
+
+    def test_survey_submit_has_aria_fallback(self):
+        """Test survey submit has ARIA fallback."""
+        service = NetflixService()
+        selectors = service.selectors
+        assert selectors.survey_submit.aria == ("button", "Continue")
 
     def test_confirm_cancel_selectors_configured(self):
-        """Test confirm cancel selectors are properly configured."""
+        """Test confirm cancel selectors are properly configured as SelectorConfig."""
         service = NetflixService()
         selectors = service.selectors
-        assert len(selectors.confirm_cancel) > 0
-        assert "[data-uia='confirm-cancel-btn']" in selectors.confirm_cancel
+        assert isinstance(selectors.confirm_cancel, SelectorConfig)
+        assert len(selectors.confirm_cancel.css) > 0
+        assert "[data-uia='confirm-cancel-btn']" in selectors.confirm_cancel.css
+
+    def test_confirm_cancel_has_aria_fallback(self):
+        """Test confirm cancel has ARIA fallback."""
+        service = NetflixService()
+        selectors = service.selectors
+        assert selectors.confirm_cancel.aria == ("button", "Finish Cancellation")
 
 
 class TestNetflixServiceTextIndicators:

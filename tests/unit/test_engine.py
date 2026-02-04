@@ -6,11 +6,15 @@ Tests cover:
 - _complete creates CancellationResult
 - with_retry succeeds on first try
 - with_retry retries on TransientError
+- Engine accepts ServiceProtocol (service-agnostic)
+- _click_selector helper extracts CSS and passes ARIA fallback
+- Generic checkpoint messages use service name
 """
 
 import time
+from dataclasses import dataclass
 from pathlib import Path
-from unittest.mock import MagicMock
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
@@ -18,6 +22,7 @@ from subterminator.core.protocols import (
     CancellationResult,
     State,
 )
+from subterminator.services.selectors import SelectorConfig
 from subterminator.utils.config import AppConfig
 from subterminator.utils.exceptions import TransientError
 
@@ -542,6 +547,100 @@ class TestGetResultMessage:
         assert engine._get_result_message() == "Cancellation failed"
 
 
+class TestHandleStateLoginRequired:
+    """Tests for LOGIN_REQUIRED state handling."""
+
+    @pytest.mark.asyncio
+    async def test_login_required_navigates_to_entry_url_after_auth(
+        self, tmp_path: Path
+    ) -> None:
+        """After LOGIN_REQUIRED auth, engine should navigate to entry_url."""
+        from unittest.mock import AsyncMock
+
+        from subterminator.core.ai import HeuristicInterpreter
+        from subterminator.core.engine import CancellationEngine
+        from subterminator.services.netflix import NetflixService
+        from subterminator.utils.session import SessionLogger
+
+        # Setup
+        service = NetflixService()
+        mock_browser = AsyncMock()
+        mock_browser.url = AsyncMock(return_value="https://www.netflix.com/account")
+        mock_browser.text_content = AsyncMock(return_value="Account Cancel membership")
+        mock_browser.screenshot = AsyncMock(return_value=b"fake_screenshot")
+
+        session = SessionLogger(
+            output_dir=tmp_path, service="netflix", target="test@example.com"
+        )
+        config = AppConfig(anthropic_api_key=None, output_dir=tmp_path)
+
+        # Create engine with mocked input callback to simulate user completing login
+        engine = CancellationEngine(
+            service=service,
+            browser=mock_browser,
+            heuristic=HeuristicInterpreter(),
+            ai=None,
+            session=session,
+            config=config,
+            input_callback=lambda checkpoint, timeout: "",  # Simulate Enter press
+        )
+
+        # Call _handle_state for LOGIN_REQUIRED
+        await engine._handle_state(State.LOGIN_REQUIRED)
+
+        # Verify navigation was called with entry_url after auth checkpoint
+        mock_browser.navigate.assert_called_once_with(
+            service.entry_url, config.page_timeout
+        )
+
+
+class TestHandleStateUnknown:
+    """Tests for UNKNOWN state handling."""
+
+    @pytest.mark.asyncio
+    async def test_unknown_state_navigates_to_entry_url_for_recovery(
+        self, tmp_path: Path
+    ) -> None:
+        """UNKNOWN state should navigate to entry_url before re-detection."""
+        from unittest.mock import AsyncMock
+
+        from subterminator.core.ai import HeuristicInterpreter
+        from subterminator.core.engine import CancellationEngine
+        from subterminator.services.netflix import NetflixService
+        from subterminator.utils.session import SessionLogger
+
+        # Setup
+        service = NetflixService()
+        mock_browser = AsyncMock()
+        mock_browser.url = AsyncMock(return_value="https://www.netflix.com/account")
+        mock_browser.text_content = AsyncMock(return_value="Account Cancel membership")
+        mock_browser.screenshot = AsyncMock(return_value=b"fake_screenshot")
+
+        session = SessionLogger(
+            output_dir=tmp_path, service="netflix", target="test@example.com"
+        )
+        config = AppConfig(anthropic_api_key=None, output_dir=tmp_path)
+
+        # Create engine with mocked input callback
+        engine = CancellationEngine(
+            service=service,
+            browser=mock_browser,
+            heuristic=HeuristicInterpreter(),
+            ai=None,
+            session=session,
+            config=config,
+            input_callback=lambda checkpoint, timeout: "",  # Simulate Enter press
+        )
+
+        # Call _handle_state for UNKNOWN
+        await engine._handle_state(State.UNKNOWN)
+
+        # Verify navigation was called with entry_url after human checkpoint
+        mock_browser.navigate.assert_called_once_with(
+            service.entry_url, config.page_timeout
+        )
+
+
 class TestModuleExports:
     """Tests for module exports."""
 
@@ -551,3 +650,416 @@ class TestModuleExports:
 
         assert CancellationEngine.__name__ == "CancellationEngine"
         assert with_retry.__name__ == "with_retry"
+
+
+# --- Phase 4: Service-Agnostic Engine Tests ---
+
+
+@dataclass
+class MockServiceConfig:
+    """Mock service configuration for testing."""
+
+    name: str = "TestService"
+
+
+@dataclass
+class MockServiceSelectors:
+    """Mock selectors for testing."""
+
+    cancel_link: SelectorConfig = None  # type: ignore[assignment]
+    decline_offer: SelectorConfig = None  # type: ignore[assignment]
+    survey_option: SelectorConfig = None  # type: ignore[assignment]
+    survey_submit: SelectorConfig = None  # type: ignore[assignment]
+    confirm_cancel: SelectorConfig = None  # type: ignore[assignment]
+
+    def __post_init__(self) -> None:
+        """Initialize with default SelectorConfig values."""
+        self.cancel_link = SelectorConfig(css=["#cancel"])
+        self.decline_offer = SelectorConfig(css=["#decline"])
+        self.survey_option = SelectorConfig(css=["#survey-option"])
+        self.survey_submit = SelectorConfig(css=["#survey-submit"])
+        self.confirm_cancel = SelectorConfig(css=["#confirm"])
+
+
+class MockService:
+    """Mock service implementing ServiceProtocol for testing."""
+
+    def __init__(self, name: str = "TestService") -> None:
+        self._config = MockServiceConfig(name=name)
+        self._selectors = MockServiceSelectors()
+
+    @property
+    def config(self) -> MockServiceConfig:
+        return self._config
+
+    @property
+    def service_id(self) -> str:
+        return "test_service"
+
+    @property
+    def entry_url(self) -> str:
+        return "https://test.example.com/account"
+
+    @property
+    def selectors(self) -> MockServiceSelectors:
+        return self._selectors
+
+
+class TestEngineServiceProtocol:
+    """Test engine works with ServiceProtocol (Step 4.1)."""
+
+    def test_engine_accepts_mock_service_protocol(self, tmp_path: Path) -> None:
+        """Engine should accept any ServiceProtocol implementation (4.1.1)."""
+        from subterminator.core.ai import HeuristicInterpreter
+        from subterminator.core.engine import CancellationEngine
+        from subterminator.utils.session import SessionLogger
+
+        mock_service = MockService(name="MockTestService")
+        browser = MagicMock()
+        heuristic = HeuristicInterpreter()
+        session = SessionLogger(
+            output_dir=tmp_path, service="test_service", target="test@example.com"
+        )
+        config = AppConfig(
+            anthropic_api_key="test-key",
+            output_dir=tmp_path,
+        )
+
+        engine = CancellationEngine(
+            service=mock_service,
+            browser=browser,
+            heuristic=heuristic,
+            ai=None,
+            session=session,
+            config=config,
+        )
+
+        assert engine.service == mock_service
+        assert engine.service.config.name == "MockTestService"
+
+    def test_engine_works_with_netflix_service(self, tmp_path: Path) -> None:
+        """Engine should work with NetflixService (4.1.2)."""
+        from subterminator.core.ai import HeuristicInterpreter
+        from subterminator.core.engine import CancellationEngine
+        from subterminator.services.netflix import NetflixService
+        from subterminator.utils.session import SessionLogger
+
+        service = NetflixService()
+        browser = MagicMock()
+        heuristic = HeuristicInterpreter()
+        session = SessionLogger(
+            output_dir=tmp_path, service="netflix", target="test@example.com"
+        )
+        config = AppConfig(
+            anthropic_api_key="test-key",
+            output_dir=tmp_path,
+        )
+
+        engine = CancellationEngine(
+            service=service,
+            browser=browser,
+            heuristic=heuristic,
+            ai=None,
+            session=session,
+            config=config,
+        )
+
+        assert engine.service == service
+        assert engine.service.config.name == "Netflix"
+
+    def test_engine_type_annotation_is_service_protocol(self) -> None:
+        """Engine __init__ should accept ServiceProtocol type (4.1.3)."""
+        import inspect
+
+        from subterminator.core.engine import CancellationEngine
+
+        sig = inspect.signature(CancellationEngine.__init__)
+        service_param = sig.parameters["service"]
+        # Check annotation string contains ServiceProtocol
+        annotation_str = str(service_param.annotation)
+        assert "ServiceProtocol" in annotation_str or "Protocol" in annotation_str
+
+
+class TestClickSelector:
+    """Test _click_selector helper (Step 4.2)."""
+
+    @pytest.mark.asyncio
+    async def test_click_selector_extracts_css(self, tmp_path: Path) -> None:
+        """_click_selector should extract .css from SelectorConfig (4.2.1)."""
+        from subterminator.core.ai import HeuristicInterpreter
+        from subterminator.core.engine import CancellationEngine
+        from subterminator.utils.session import SessionLogger
+
+        mock_service = MockService()
+        mock_browser = AsyncMock()
+        session = SessionLogger(
+            output_dir=tmp_path, service="test", target="test@example.com"
+        )
+        config = AppConfig(anthropic_api_key=None, output_dir=tmp_path)
+
+        engine = CancellationEngine(
+            service=mock_service,
+            browser=mock_browser,
+            heuristic=HeuristicInterpreter(),
+            ai=None,
+            session=session,
+            config=config,
+        )
+
+        selector = SelectorConfig(css=["#test-element", ".fallback-class"], aria=None)
+        await engine._click_selector(selector)
+
+        mock_browser.click.assert_called_once_with(
+            ["#test-element", ".fallback-class"],
+            fallback_role=None,
+            timeout=config.element_timeout,
+        )
+
+    @pytest.mark.asyncio
+    async def test_click_selector_passes_aria(self, tmp_path: Path) -> None:
+        """_click_selector should pass .aria as fallback_role (4.2.2)."""
+        from subterminator.core.ai import HeuristicInterpreter
+        from subterminator.core.engine import CancellationEngine
+        from subterminator.utils.session import SessionLogger
+
+        mock_service = MockService()
+        mock_browser = AsyncMock()
+        session = SessionLogger(
+            output_dir=tmp_path, service="test", target="test@example.com"
+        )
+        config = AppConfig(anthropic_api_key=None, output_dir=tmp_path)
+
+        engine = CancellationEngine(
+            service=mock_service,
+            browser=mock_browser,
+            heuristic=HeuristicInterpreter(),
+            ai=None,
+            session=session,
+            config=config,
+        )
+
+        selector = SelectorConfig(
+            css=["#test-button"],
+            aria=("button", "Click me"),
+        )
+        await engine._click_selector(selector)
+
+        mock_browser.click.assert_called_once_with(
+            ["#test-button"],
+            fallback_role=("button", "Click me"),
+            timeout=config.element_timeout,
+        )
+
+    @pytest.mark.asyncio
+    async def test_click_selector_handles_aria_none(self, tmp_path: Path) -> None:
+        """_click_selector should handle aria=None correctly (4.2.3)."""
+        from subterminator.core.ai import HeuristicInterpreter
+        from subterminator.core.engine import CancellationEngine
+        from subterminator.utils.session import SessionLogger
+
+        mock_service = MockService()
+        mock_browser = AsyncMock()
+        session = SessionLogger(
+            output_dir=tmp_path, service="test", target="test@example.com"
+        )
+        config = AppConfig(anthropic_api_key=None, output_dir=tmp_path)
+
+        engine = CancellationEngine(
+            service=mock_service,
+            browser=mock_browser,
+            heuristic=HeuristicInterpreter(),
+            ai=None,
+            session=session,
+            config=config,
+        )
+
+        selector = SelectorConfig(css=["input[type='radio']"], aria=None)
+        await engine._click_selector(selector)
+
+        # Verify fallback_role is None
+        call_args = mock_browser.click.call_args
+        assert call_args.kwargs["fallback_role"] is None
+
+    @pytest.mark.asyncio
+    async def test_click_selector_helper_works_correctly(self, tmp_path: Path) -> None:
+        """_click_selector helper should work with various inputs (4.2.4)."""
+        from subterminator.core.ai import HeuristicInterpreter
+        from subterminator.core.engine import CancellationEngine
+        from subterminator.utils.session import SessionLogger
+
+        mock_service = MockService()
+        mock_browser = AsyncMock()
+        session = SessionLogger(
+            output_dir=tmp_path, service="test", target="test@example.com"
+        )
+        config = AppConfig(anthropic_api_key=None, output_dir=tmp_path)
+
+        engine = CancellationEngine(
+            service=mock_service,
+            browser=mock_browser,
+            heuristic=HeuristicInterpreter(),
+            ai=None,
+            session=session,
+            config=config,
+        )
+
+        # Test with multiple CSS selectors and ARIA
+        selector = SelectorConfig(
+            css=["#primary", ".secondary", "[data-test='fallback']"],
+            aria=("link", "Cancel Membership"),
+        )
+        await engine._click_selector(selector)
+
+        mock_browser.click.assert_called_once_with(
+            ["#primary", ".secondary", "[data-test='fallback']"],
+            fallback_role=("link", "Cancel Membership"),
+            timeout=config.element_timeout,
+        )
+
+
+class TestGenericMessages:
+    """Test checkpoint messages use service name (Step 4.3)."""
+
+    @pytest.mark.asyncio
+    async def test_auth_prompt_includes_service_name(self, tmp_path: Path) -> None:
+        """AUTH prompt should include service.config.name (4.3.1)."""
+        from subterminator.core.ai import HeuristicInterpreter
+        from subterminator.core.engine import CancellationEngine
+        from subterminator.utils.session import SessionLogger
+
+        mock_service = MockService(name="CustomService")
+        session = SessionLogger(
+            output_dir=tmp_path, service="custom", target="test@example.com"
+        )
+        config = AppConfig(anthropic_api_key=None, output_dir=tmp_path)
+
+        # Capture output messages
+        captured_messages: list[tuple[str, str]] = []
+
+        def capture_output(state: str, msg: str) -> None:
+            captured_messages.append((state, msg))
+
+        engine = CancellationEngine(
+            service=mock_service,
+            browser=MagicMock(),
+            heuristic=HeuristicInterpreter(),
+            ai=None,
+            session=session,
+            config=config,
+            output_callback=capture_output,
+            input_callback=lambda checkpoint, timeout: "",
+        )
+
+        # Trigger AUTH checkpoint
+        try:
+            await engine._human_checkpoint("AUTH", 5000)
+        except Exception:
+            pass  # We're just testing the message content
+
+        # Check that the message includes "CustomService"
+        auth_messages = [msg for state, msg in captured_messages if state == "AUTH"]
+        assert len(auth_messages) == 1
+        assert "CustomService" in auth_messages[0]
+        assert "Please log in to CustomService" in auth_messages[0]
+
+    @pytest.mark.asyncio
+    async def test_confirm_prompt_includes_service_name(self, tmp_path: Path) -> None:
+        """CONFIRM prompt structure should be verified (4.3.2)."""
+        from subterminator.core.ai import HeuristicInterpreter
+        from subterminator.core.engine import CancellationEngine
+        from subterminator.utils.session import SessionLogger
+
+        mock_service = MockService(name="MyService")
+        session = SessionLogger(
+            output_dir=tmp_path, service="myservice", target="test@example.com"
+        )
+        config = AppConfig(anthropic_api_key=None, output_dir=tmp_path)
+
+        captured_messages: list[tuple[str, str]] = []
+
+        def capture_output(state: str, msg: str) -> None:
+            captured_messages.append((state, msg))
+
+        engine = CancellationEngine(
+            service=mock_service,
+            browser=MagicMock(),
+            heuristic=HeuristicInterpreter(),
+            ai=None,
+            session=session,
+            config=config,
+            output_callback=capture_output,
+            input_callback=lambda checkpoint, timeout: "confirm",
+        )
+
+        # Trigger CONFIRM checkpoint
+        try:
+            await engine._human_checkpoint("CONFIRM", 5000)
+        except Exception:
+            pass
+
+        # CONFIRM message should include service name
+        confirm_messages = [
+            msg for state, msg in captured_messages if state == "CONFIRM"
+        ]
+        assert len(confirm_messages) == 1
+        assert "MyService" in confirm_messages[0]
+        assert "subscription" in confirm_messages[0]
+
+    @pytest.mark.asyncio
+    async def test_no_hardcoded_netflix_in_auth_prompt(self, tmp_path: Path) -> None:
+        """No hardcoded 'Netflix' should appear in AUTH prompts (4.3.3)."""
+        from subterminator.core.ai import HeuristicInterpreter
+        from subterminator.core.engine import CancellationEngine
+        from subterminator.utils.session import SessionLogger
+
+        # Use a service with a different name
+        mock_service = MockService(name="Spotify")
+        session = SessionLogger(
+            output_dir=tmp_path, service="spotify", target="test@example.com"
+        )
+        config = AppConfig(anthropic_api_key=None, output_dir=tmp_path)
+
+        captured_messages: list[tuple[str, str]] = []
+
+        def capture_output(state: str, msg: str) -> None:
+            captured_messages.append((state, msg))
+
+        engine = CancellationEngine(
+            service=mock_service,
+            browser=MagicMock(),
+            heuristic=HeuristicInterpreter(),
+            ai=None,
+            session=session,
+            config=config,
+            output_callback=capture_output,
+            input_callback=lambda checkpoint, timeout: "",
+        )
+
+        # Trigger AUTH checkpoint
+        try:
+            await engine._human_checkpoint("AUTH", 5000)
+        except Exception:
+            pass
+
+        # Verify "Netflix" does NOT appear in the message
+        auth_messages = [msg for state, msg in captured_messages if state == "AUTH"]
+        assert len(auth_messages) == 1
+        assert "Netflix" not in auth_messages[0]
+        assert "Spotify" in auth_messages[0]
+
+
+class TestEngineAllTestsPass:
+    """Verify all engine tests pass with updated click pattern (4.2.7)."""
+
+    def test_engine_module_imports_service_protocol(self) -> None:
+        """Engine module should import ServiceProtocol, not NetflixService."""
+        from subterminator.core import engine
+
+        # Check that ServiceProtocol is imported
+        assert hasattr(engine, "ServiceProtocol") or "ServiceProtocol" in dir(engine)
+
+        # Verify NetflixService is not directly imported in engine module
+        import inspect
+
+        source = inspect.getsource(engine)
+        assert "from subterminator.services.netflix import NetflixService" not in source

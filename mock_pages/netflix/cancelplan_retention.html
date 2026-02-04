@@ -29,19 +29,26 @@
   <main class="container">
     <div style="max-width: 600px; margin: 0 auto;">
       <h1>Before you go...</h1>
-      <p>We have a special offer just for you. Stay with Netflix and save!</p>
+      <p>We have some options that might work better for you.</p>
 
-      <!-- Special Offer Box -->
-      <div class="offer-box">
-        <h2>Stay and Save 50%</h2>
-        <p style="color: var(--netflix-light-gray);">Keep your Premium plan for</p>
-        <div class="offer-price">
-          $11.49<span>/month</span>
-        </div>
-        <p style="color: var(--netflix-light-gray);">for the next 3 months</p>
+      <!-- Option Cards -->
+      <div class="card" style="margin-bottom: 16px;">
+        <h3>Pause your membership</h3>
+        <p style="color: var(--netflix-light-gray); margin-bottom: 16px;">
+          Take a break for 1 month. We'll save your profile and you won't be charged.
+        </p>
+        <a href="account.html" class="btn btn-primary btn-block" data-uia="pause-membership-btn">
+          Pause for 1 Month
+        </a>
+      </div>
 
-        <a href="account.html" class="btn btn-primary btn-large btn-block mt-20" data-uia="accept-offer-btn">
-          Accept This Offer
+      <div class="card" style="margin-bottom: 16px;">
+        <h3>Change your plan</h3>
+        <p style="color: var(--netflix-light-gray); margin-bottom: 16px;">
+          Downgrade to a cheaper plan starting at $6.99/month.
+        </p>
+        <a href="account.html" class="btn btn-secondary btn-block" data-uia="change-plan-btn">
+          See Plan Options
         </a>
       </div>
 
@@ -80,7 +87,7 @@
       </div>
 
       <p class="text-center mt-20 text-gray" style="font-size: 14px;">
-        Not interested in this offer? You can still cancel below.
+        Not interested? You can still cancel below.
       </p>
     </div>
   </main>

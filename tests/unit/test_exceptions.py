@@ -3,11 +3,13 @@
 import pytest
 
 from subterminator.utils.exceptions import (
+    CDPConnectionError,
     ConfigurationError,
     ElementNotFound,
     HumanInterventionRequired,
     NavigationError,
     PermanentError,
+    ProfileLoadError,
     ServiceError,
     StateDetectionError,
     SubTerminatorError,
@@ -64,6 +66,16 @@ class TestExceptionHierarchy:
         assert issubclass(StateDetectionError, TransientError)
         assert issubclass(StateDetectionError, SubTerminatorError)
 
+    def test_cdp_connection_error_inherits_from_permanent(self):
+        """CDPConnectionError should inherit from PermanentError."""
+        assert issubclass(CDPConnectionError, PermanentError)
+        assert issubclass(CDPConnectionError, SubTerminatorError)
+
+    def test_profile_load_error_inherits_from_permanent(self):
+        """ProfileLoadError should inherit from PermanentError."""
+        assert issubclass(ProfileLoadError, PermanentError)
+        assert issubclass(ProfileLoadError, SubTerminatorError)
+
 
 class TestExceptionRaising:
     """Test that exceptions can be raised and caught correctly."""
@@ -102,6 +114,58 @@ class TestExceptionRaising:
             except PermanentError:
                 pytest.fail("TransientError should not be caught as PermanentError")
             raise
+
+
+class TestCDPConnectionError:
+    """Tests for CDPConnectionError."""
+
+    def test_message_format(self):
+        """CDPConnectionError should format message with URL."""
+        url = "http://localhost:9222"
+        error = CDPConnectionError(url)
+        assert url in str(error)
+        assert "Chrome" in str(error)
+        assert "remote-debugging-port" in str(error)
+
+    def test_url_attribute(self):
+        """CDPConnectionError should store the URL as an attribute."""
+        url = "http://localhost:9222"
+        error = CDPConnectionError(url)
+        assert error.url == url
+
+    def test_full_message_content(self):
+        """CDPConnectionError should have the expected full message."""
+        url = "http://127.0.0.1:9333"
+        error = CDPConnectionError(url)
+        expected_msg = (
+            f"Cannot connect to Chrome at {url}. "
+            "Is Chrome running with --remote-debugging-port?"
+        )
+        assert str(error) == expected_msg
+
+
+class TestProfileLoadError:
+    """Tests for ProfileLoadError."""
+
+    def test_message_format(self):
+        """ProfileLoadError should format message with path."""
+        path = "/Users/test/.config/chrome/profile"
+        error = ProfileLoadError(path)
+        assert path in str(error)
+        assert "profile" in str(error).lower()
+
+    def test_path_attribute(self):
+        """ProfileLoadError should store the path as an attribute."""
+        path = "/Users/test/.config/chrome/profile"
+        error = ProfileLoadError(path)
+        assert error.path == path
+
+    def test_full_message_content(self):
+        """ProfileLoadError should have the expected full message."""
+        path = "/home/user/.chrome/Default"
+        error = ProfileLoadError(path)
+        expected_msg = f"Failed to load browser profile from {path}"
+        assert str(error) == expected_msg
 
 
 class TestExceptionDocstrings:
@@ -157,6 +221,17 @@ class TestExceptionDocstrings:
         assert StateDetectionError.__doc__ is not None
         assert "state" in StateDetectionError.__doc__.lower()
 
+    def test_cdp_connection_error_has_docstring(self):
+        """CDPConnectionError should have a docstring."""
+        assert CDPConnectionError.__doc__ is not None
+        doc_lower = CDPConnectionError.__doc__.lower()
+        assert "cdp" in doc_lower or "chrome" in doc_lower
+
+    def test_profile_load_error_has_docstring(self):
+        """ProfileLoadError should have a docstring."""
+        assert ProfileLoadError.__doc__ is not None
+        assert "profile" in ProfileLoadError.__doc__.lower()
+
 
 class TestModuleExports:
     """Test that exceptions are properly exported from the utils module."""
@@ -164,11 +239,13 @@ class TestModuleExports:
     def test_import_from_utils(self):
         """All exceptions should be importable from subterminator.utils."""
         from subterminator.utils import (
+            CDPConnectionError,
             ConfigurationError,
             ElementNotFound,
             HumanInterventionRequired,
             NavigationError,
             PermanentError,
+            ProfileLoadError,
             ServiceError,
             StateDetectionError,
             SubTerminatorError,
@@ -186,3 +263,5 @@ class TestModuleExports:
         assert ElementNotFound is not None
         assert NavigationError is not None
         assert StateDetectionError is not None
+        assert CDPConnectionError is not None
+        assert ProfileLoadError is not None

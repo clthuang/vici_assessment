@@ -85,18 +85,23 @@ class HeuristicInterpreter:
             )
 
         # T8.6: Text detection - cancel flow states (check before ACCOUNT_CANCELLED)
-        # These are more specific and should take priority
-        retention_phrases = [
-            "before you go",
-            "special offer",
-            "we'd hate to see you go",
-            "save",
+        # IMPORTANT: Check FINAL_CONFIRMATION first - higher priority than
+        # RETENTION_OFFER - misclassifying would skip human safety checkpoint
+
+        # FINAL_CONFIRMATION - check these FIRST (higher priority)
+        final_confirm_phrases = [
+            "finish cancellation",
+            "confirm cancellation",
+            "complete cancellation",
+            "finalize cancellation",
+            "this action is final",
+            "this is final",
+            "cannot be undone",
         ]
-        if any(phrase in text_lower for phrase in retention_phrases):
-            if "discount" in text_lower or "offer" in text_lower:
-                return AIInterpretation(
-                    State.RETENTION_OFFER, 0.75, "Retention offer detected"
-                )
+        if any(phrase in text_lower for phrase in final_confirm_phrases):
+            return AIInterpretation(
+                State.FINAL_CONFIRMATION, 0.85, "Final confirmation page detected"
+            )
 
         survey_phrases = [
             "why are you leaving",
@@ -107,15 +112,24 @@ class HeuristicInterpreter:
         if any(phrase in text_lower for phrase in survey_phrases):
             return AIInterpretation(State.EXIT_SURVEY, 0.75, "Survey language detected")
 
-        final_confirm_phrases = [
-            "finish cancellation",
-            "confirm cancellation",
-            "complete cancellation",
+        # RETENTION_OFFER - only check AFTER ruling out FINAL_CONFIRMATION
+        # Netflix uses pause/downgrade options rather than discounts
+        retention_phrases = [
+            "before you go",
+            "pause your membership",
+            "pause for 1 month",
+            "change your plan",
+            "downgrade",
+            "special offer",
+            "stay with us",
+            "we'd hate to see you go",
         ]
-        if any(phrase in text_lower for phrase in final_confirm_phrases):
-            return AIInterpretation(
-                State.FINAL_CONFIRMATION, 0.80, "Finish button detected"
-            )
+        if any(phrase in text_lower for phrase in retention_phrases):
+            # Only classify as retention if no final confirmation indicators present
+            if not any(p in text_lower for p in final_confirm_phrases):
+                return AIInterpretation(
+                    State.RETENTION_OFFER, 0.75, "Retention offer detected"
+                )
 
         # Strong COMPLETE indicators take priority (explicit completion message)
         strong_complete_phrases = [
@@ -180,12 +194,21 @@ Determine which state this page represents:
 - ACCOUNT_ACTIVE: Account page with active subscription, cancel option visible
 - ACCOUNT_CANCELLED: Account page showing cancelled/inactive subscription
 - THIRD_PARTY_BILLING: Shows billing through Apple/Google/carrier
-- RETENTION_OFFER: Discount or "stay with us" offer
+- RETENTION_OFFER: Page offering ALTERNATIVES to cancellation (pause subscription,
+  downgrade plan, special discounts). Look for: "pause", "change plan", "downgrade",
+  "special offer", "before you go". User has NOT yet finalized cancellation.
 - EXIT_SURVEY: "Why are you leaving?" survey
-- FINAL_CONFIRMATION: Final "Finish Cancellation" button
+- FINAL_CONFIRMATION: The LAST step before cancellation is executed. Look for:
+  "Finish Cancellation" button, "Confirm Cancellation" heading, explicit
+  "this is final" messaging. No alternative offers - just confirm or go back.
 - COMPLETE: Cancellation confirmed
 - FAILED: Error message displayed
 - UNKNOWN: Cannot determine
+
+KEY DISTINCTION for RETENTION_OFFER vs FINAL_CONFIRMATION:
+- RETENTION_OFFER presents alternatives to keep user subscribed (pause, downgrade).
+- FINAL_CONFIRMATION is point-of-no-return with only "confirm" or "go back".
+If page has "Finish Cancellation" and NO pause/downgrade, it's FINAL_CONFIRMATION.
 
 Also identify any actionable buttons/links with their approximate text.
 

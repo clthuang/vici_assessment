@@ -15,6 +15,7 @@ from subterminator.core.engine import CancellationEngine
 from subterminator.core.protocols import State
 from subterminator.services.mock import MockServer
 from subterminator.services.netflix import NetflixService
+from subterminator.services.selectors import SelectorConfig
 from subterminator.utils.config import AppConfig
 from subterminator.utils.session import SessionLogger
 
@@ -51,10 +52,20 @@ class TransitioningMockBrowser:
         """Simulate navigation - no-op since we control content via state."""
         pass
 
-    async def click(self, selector: str | list[str]) -> None:
+    async def click(
+        self,
+        selector: str | list[str] | SelectorConfig,
+        fallback_role: tuple[str, str] | None = None,
+        timeout: int = 5000,
+    ) -> None:
         """Simulate click and advance flow state."""
-        # Convert list to string for matching
-        selector_str = selector[0] if isinstance(selector, list) else selector
+        # Handle SelectorConfig type (used by NetflixService)
+        if isinstance(selector, SelectorConfig):
+            selector_str = selector.css[0] if selector.css else ""
+        elif isinstance(selector, list):
+            selector_str = selector[0] if selector else ""
+        else:
+            selector_str = selector
 
         # Transition based on what's being clicked
         if "Cancel" in selector_str or "cancel" in selector_str:

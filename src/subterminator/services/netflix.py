@@ -2,15 +2,18 @@
 
 from dataclasses import dataclass
 
+from subterminator.services.selectors import SelectorConfig
+
 
 @dataclass
 class ServiceSelectors:
-    """CSS/XPath selectors for service-specific elements."""
-    cancel_link: list[str]
-    decline_offer: list[str]
-    survey_option: list[str]
-    survey_submit: list[str]
-    confirm_cancel: list[str]
+    """CSS/XPath selectors for service-specific elements with ARIA fallbacks."""
+
+    cancel_link: SelectorConfig
+    decline_offer: SelectorConfig
+    survey_option: SelectorConfig
+    survey_submit: SelectorConfig
+    confirm_cancel: SelectorConfig
 
 
 @dataclass
@@ -38,33 +41,48 @@ class NetflixService:
             entry_url="https://www.netflix.com/account",
             mock_entry_url="http://localhost:8000/account",
             selectors=ServiceSelectors(
-                cancel_link=[
-                    "[data-uia='action-cancel-membership']",
-                    "a:has-text('Cancel Membership')",
-                    "button:has-text('Cancel Membership')",
-                    ".cancel-membership-link",
-                ],
-                decline_offer=[
-                    "[data-uia='continue-cancel-btn']",
-                    "button:has-text('Continue to Cancel')",
-                    "a:has-text('No Thanks')",
-                    "button:has-text('No thanks')",
-                ],
-                survey_option=[
-                    "input[type='radio']",
-                    "[data-uia='cancel-reason-item']",
-                    ".survey-option input",
-                ],
-                survey_submit=[
-                    "[data-uia='continue-btn']",
-                    "button:has-text('Continue')",
-                    "button[type='submit']",
-                ],
-                confirm_cancel=[
-                    "[data-uia='confirm-cancel-btn']",
-                    "button:has-text('Finish Cancellation')",
-                    "button:has-text('Confirm Cancellation')",
-                ],
+                cancel_link=SelectorConfig(
+                    css=[
+                        "[data-uia='action-cancel-membership']",
+                        "a:has-text('Cancel Membership')",
+                        "button:has-text('Cancel Membership')",
+                        ".cancel-membership-link",
+                    ],
+                    aria=("link", "Cancel Membership"),
+                ),
+                decline_offer=SelectorConfig(
+                    css=[
+                        "[data-uia='continue-cancel-btn']",
+                        "button:has-text('Continue to Cancel')",
+                        "a:has-text('No Thanks')",
+                        "button:has-text('No thanks')",
+                    ],
+                    aria=("button", "Continue to Cancel"),
+                ),
+                survey_option=SelectorConfig(
+                    css=[
+                        "input[type='radio']",
+                        "[data-uia='cancel-reason-item']",
+                        ".survey-option input",
+                    ],
+                    aria=None,  # Radio buttons vary, skip ARIA
+                ),
+                survey_submit=SelectorConfig(
+                    css=[
+                        "[data-uia='continue-btn']",
+                        "button:has-text('Continue')",
+                        "button[type='submit']",
+                    ],
+                    aria=("button", "Continue"),
+                ),
+                confirm_cancel=SelectorConfig(
+                    css=[
+                        "[data-uia='confirm-cancel-btn']",
+                        "button:has-text('Finish Cancellation')",
+                        "button:has-text('Confirm Cancellation')",
+                    ],
+                    aria=("button", "Finish Cancellation"),
+                ),
             ),
             text_indicators={
                 "login": ["Sign In", "Email", "Password", "Log In"],
@@ -108,3 +126,8 @@ class NetflixService:
     def name(self) -> str:
         """Get service name."""
         return self._config.name
+
+    @property
+    def service_id(self) -> str:
+        """Get unique service identifier."""
+        return "netflix"
