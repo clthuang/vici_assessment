@@ -85,8 +85,8 @@ class HeuristicInterpreter:
             )
 
         # T8.6: Text detection - cancel flow states (check before ACCOUNT_CANCELLED)
-        # IMPORTANT: Check FINAL_CONFIRMATION first - it has higher priority than RETENTION_OFFER
-        # because misclassifying it would skip the human safety checkpoint
+        # IMPORTANT: Check FINAL_CONFIRMATION first - higher priority than
+        # RETENTION_OFFER - misclassifying would skip human safety checkpoint
 
         # FINAL_CONFIRMATION - check these FIRST (higher priority)
         final_confirm_phrases = [
@@ -199,16 +199,16 @@ Determine which state this page represents:
   "special offer", "before you go". User has NOT yet finalized cancellation.
 - EXIT_SURVEY: "Why are you leaving?" survey
 - FINAL_CONFIRMATION: The LAST step before cancellation is executed. Look for:
-  "Finish Cancellation" button, "Confirm Cancellation" heading, explicit "this is final"
-  or "this action is final" messaging. No alternative offers presented - just confirm or go back.
+  "Finish Cancellation" button, "Confirm Cancellation" heading, explicit
+  "this is final" messaging. No alternative offers - just confirm or go back.
 - COMPLETE: Cancellation confirmed
 - FAILED: Error message displayed
 - UNKNOWN: Cannot determine
 
 KEY DISTINCTION for RETENTION_OFFER vs FINAL_CONFIRMATION:
-- RETENTION_OFFER presents alternatives to keep the user subscribed (pause, downgrade, offers).
-- FINAL_CONFIRMATION is the point-of-no-return with only "confirm" or "go back" options.
-If the page has a "Finish Cancellation" button and NO pause/downgrade options, it's FINAL_CONFIRMATION.
+- RETENTION_OFFER presents alternatives to keep user subscribed (pause, downgrade).
+- FINAL_CONFIRMATION is point-of-no-return with only "confirm" or "go back".
+If page has "Finish Cancellation" and NO pause/downgrade, it's FINAL_CONFIRMATION.
 
 Also identify any actionable buttons/links with their approximate text.
 
