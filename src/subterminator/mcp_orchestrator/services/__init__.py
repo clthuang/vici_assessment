@@ -1,0 +1,15 @@
+"""Service configuration for MCP orchestrator.
+
+This subpackage defines service-specific configurations for browser
+orchestration, including checkpoint conditions, success/failure indicators,
+and service-specific prompts.
+"""
+
+from .base import ServiceConfig
+from .registry import ServiceRegistry, default_registry
+
+__all__ = [
+    "ServiceConfig",
+    "ServiceRegistry",
+    "default_registry",
+]

@@ -6,7 +6,6 @@ LLM-driven browser automation loop.
 
 from __future__ import annotations
 
-import asyncio
 import logging
 import signal
 from typing import TYPE_CHECKING, Any
@@ -19,7 +18,7 @@ from .exceptions import (
 )
 from .services.registry import default_registry
 from .snapshot import normalize_snapshot
-from .types import NormalizedSnapshot, TaskReason, TaskResult, ToolCall
+from .types import NormalizedSnapshot, TaskResult, ToolCall
 
 if TYPE_CHECKING:
     from .llm_client import LLMClient
@@ -105,9 +104,9 @@ class TaskRunner:
 
     def __init__(
         self,
-        mcp_client: "MCPClient",
-        llm_client: "LLMClient",
-        service_registry: "ServiceRegistry | None" = None,
+        mcp_client: MCPClient,
+        llm_client: LLMClient,
+        service_registry: ServiceRegistry | None = None,
         disable_checkpoints: bool = False,
     ) -> None:
         """Initialize task runner.
@@ -125,7 +124,7 @@ class TaskRunner:
         self._messages: list[dict[str, Any]] = []
         self._shutdown_requested = False
 
-    def _build_system_prompt(self, config: "ServiceConfig") -> str:
+    def _build_system_prompt(self, config: ServiceConfig) -> str:
         """Build system prompt with service-specific additions.
 
         Args:
@@ -299,7 +298,7 @@ class TaskRunner:
                 # Take first tool call only (single-tool-per-turn)
                 tc_data = tool_calls[0]
                 if len(tool_calls) > 1:
-                    logger.warning(f"Multiple tool_calls ignored, using first only")
+                    logger.warning("Multiple tool_calls ignored, using first only")
 
                 tc = ToolCall(
                     id=tc_data.get("id", f"call_{turn}"),
@@ -371,7 +370,7 @@ class TaskRunner:
                     # Execute MCP tool
                     try:
                         tool_result = await self._execute_mcp_tool(tc)
-                    except MCPConnectionError as e:
+                    except MCPConnectionError:
                         # Try reconnect once
                         try:
                             await self._mcp.reconnect()
@@ -440,7 +439,7 @@ class TaskRunner:
         self,
         tc: ToolCall,
         snapshot: NormalizedSnapshot,
-        config: "ServiceConfig",
+        config: ServiceConfig,
         turn: int,
     ) -> TaskResult | str:
         """Handle virtual tool execution.
@@ -465,7 +464,7 @@ class TaskRunner:
         self,
         tc: ToolCall,
         snapshot: NormalizedSnapshot,
-        config: "ServiceConfig",
+        config: ServiceConfig,
         turn: int,
     ) -> TaskResult | str:
         """Handle complete_task virtual tool.
@@ -542,7 +541,7 @@ class TaskRunner:
     def _verify_completion(
         self,
         snapshot: NormalizedSnapshot,
-        config: "ServiceConfig",
+        config: ServiceConfig,
     ) -> bool:
         """Verify task completion using success/failure indicators.
 

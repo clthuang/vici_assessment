@@ -6,6 +6,7 @@ Playwright MCP server via stdio transport.
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import subprocess
 from contextlib import AsyncExitStack
@@ -248,6 +249,11 @@ class MCPClient:
 
         self._session = None
         self._tools = None
+
+        # Allow subprocess transport cleanup callbacks to run
+        # This prevents "Event loop is closed" errors during garbage collection
+        await asyncio.sleep(0.1)
+
         logger.info("Disconnected from MCP server")
 
     async def __aenter__(self) -> MCPClient:

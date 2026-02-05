@@ -15,7 +15,6 @@ from ..types import (
 from .base import ServiceConfig
 from .registry import default_registry
 
-
 # =============================================================================
 # Checkpoint Predicates (CheckpointPredicate: tool + snapshot -> bool)
 # =============================================================================
