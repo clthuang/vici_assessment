@@ -858,6 +858,263 @@ class TestAIBrowserAgentClearHistory:
         assert len(agent._error_history) == 0
 
 
+class TestAgenticLoop:
+    """Tests for agentic loop with post-action feedback."""
+
+    @pytest.mark.asyncio
+    async def test_perceives_after_each_action(self) -> None:
+        """Agent should re-perceive after executing each action.
+
+        The loop flow:
+        1. Perceive → plan1 (continue=True) → execute → wait
+        2. Perceive → plan2 (continue=True) → execute → wait
+        3. Perceive → plan3 (continue=False) → STOP (no execute)
+
+        When continue_after=False, the agent stops without executing that action.
+        So we get 3 perceives for 2 executed actions + 1 final check.
+        """
+        from subterminator.core.agent import AIBrowserAgent
+        from subterminator.core.protocols import ActionPlan, State, TargetStrategy
+
+        mock_browser = AsyncMock()
+        mock_browser.screenshot = AsyncMock(return_value=b"screenshot")
+        mock_browser.url = AsyncMock(return_value="https://netflix.com/cancel")
+        mock_browser.text_content = AsyncMock(return_value="Cancel your plan")
+        mock_browser.viewport_size = AsyncMock(return_value=(1920, 1080))
+        mock_browser.scroll_position = AsyncMock(return_value=(0, 0))
+        mock_browser.accessibility_tree = AsyncMock(return_value="{}")
+        mock_browser.evaluate = AsyncMock(return_value=[])
+        mock_browser.click_by_bbox = AsyncMock(return_value={"clicked": True})
+        mock_browser.wait_for_navigation = AsyncMock()
+
+        # Create action plans for 2 actions + final "done" plan
+        plan1 = ActionPlan(
+            action_type="click",
+            primary_target=TargetStrategy(method="css", css_selector="#expander"),
+            reasoning="Click expander to reveal section",
+            confidence=0.9,
+            continue_after=True,
+            detected_state=State.RETENTION_OFFER,
+        )
+        plan2 = ActionPlan(
+            action_type="click",
+            primary_target=TargetStrategy(method="css", css_selector="#checkbox"),
+            reasoning="Tick confirmation checkbox",
+            confidence=0.9,
+            continue_after=True,
+            detected_state=State.RETENTION_OFFER,
+        )
+        plan3 = ActionPlan(
+            action_type="click",
+            primary_target=TargetStrategy(method="css", css_selector="#cancel-btn"),
+            reasoning="Goal complete - cancellation confirmed",
+            confidence=0.9,
+            continue_after=False,  # Signal to stop
+            detected_state=State.COMPLETE,
+        )
+
+        mock_planner = Mock()
+        mock_planner.plan_action = AsyncMock(side_effect=[plan1, plan2, plan3])
+        mock_planner.SELF_CORRECT_PROMPT = ""
+
+        agent = AIBrowserAgent(
+            browser=mock_browser,
+            planner=mock_planner,
+            max_retries=1
+        )
+
+        result = await agent.run_agentic_loop(goal="Cancel subscription")
+
+        # Should have perceived 3 times: initial + after each of 2 executed actions
+        # (3rd plan with continue_after=False doesn't execute, just returns)
+        assert mock_browser.screenshot.call_count == 3
+        # 2 actions executed (plans 1 and 2)
+        assert mock_browser.click_by_bbox.call_count == 2
+        assert result.state == State.COMPLETE
+
+    @pytest.mark.asyncio
+    async def test_stops_when_goal_complete(self) -> None:
+        """Agent should stop when Claude indicates goal is complete."""
+        from subterminator.core.agent import AIBrowserAgent
+        from subterminator.core.protocols import ActionPlan, State, TargetStrategy
+
+        mock_browser = AsyncMock()
+        mock_browser.screenshot = AsyncMock(return_value=b"screenshot")
+        mock_browser.url = AsyncMock(return_value="https://netflix.com/cancel")
+        mock_browser.text_content = AsyncMock(return_value="Cancellation complete")
+        mock_browser.viewport_size = AsyncMock(return_value=(1920, 1080))
+        mock_browser.scroll_position = AsyncMock(return_value=(0, 0))
+        mock_browser.accessibility_tree = AsyncMock(return_value="{}")
+        mock_browser.evaluate = AsyncMock(return_value=[])
+
+        # Claude says goal is complete immediately (no action needed)
+        plan = ActionPlan(
+            action_type="click",
+            primary_target=TargetStrategy(method="css", css_selector="body"),
+            reasoning="Goal complete - cancellation confirmed",
+            confidence=0.95,
+            continue_after=False,
+            detected_state=State.COMPLETE,
+        )
+
+        mock_planner = Mock()
+        mock_planner.plan_action = AsyncMock(return_value=plan)
+        mock_planner.SELF_CORRECT_PROMPT = ""
+
+        agent = AIBrowserAgent(
+            browser=mock_browser,
+            planner=mock_planner,
+            max_retries=1
+        )
+
+        result = await agent.run_agentic_loop(goal="Cancel subscription")
+
+        assert result.state == State.COMPLETE
+        # No action executed since Claude said done
+        assert mock_browser.click_by_bbox.call_count == 0
+
+    @pytest.mark.asyncio
+    async def test_stops_at_max_actions(self) -> None:
+        """Agent should stop after max_actions is reached."""
+        from subterminator.core.agent import AIBrowserAgent
+        from subterminator.core.protocols import ActionPlan, State, TargetStrategy
+
+        mock_browser = AsyncMock()
+        mock_browser.screenshot = AsyncMock(return_value=b"screenshot")
+        mock_browser.url = AsyncMock(return_value="https://netflix.com/cancel")
+        mock_browser.text_content = AsyncMock(return_value="Page content")
+        mock_browser.viewport_size = AsyncMock(return_value=(1920, 1080))
+        mock_browser.scroll_position = AsyncMock(return_value=(0, 0))
+        mock_browser.accessibility_tree = AsyncMock(return_value="{}")
+        mock_browser.evaluate = AsyncMock(return_value=[])
+        mock_browser.click_by_bbox = AsyncMock(return_value={"clicked": True})
+        mock_browser.wait_for_navigation = AsyncMock()
+
+        # Always returns continue_after=True (never completes)
+        plan = ActionPlan(
+            action_type="click",
+            primary_target=TargetStrategy(method="css", css_selector="#btn"),
+            reasoning="Keep going",
+            confidence=0.9,
+            continue_after=True,
+            detected_state=State.UNKNOWN,
+        )
+
+        mock_planner = Mock()
+        mock_planner.plan_action = AsyncMock(return_value=plan)
+        mock_planner.SELF_CORRECT_PROMPT = ""
+
+        agent = AIBrowserAgent(
+            browser=mock_browser,
+            planner=mock_planner,
+            max_retries=1
+        )
+
+        result = await agent.run_agentic_loop(goal="Cancel subscription", max_actions=3)
+
+        assert result.state == State.FAILED
+        assert "Max actions" in result.message
+        assert result.steps == 3
+
+    @pytest.mark.asyncio
+    async def test_pauses_at_human_checkpoint(self) -> None:
+        """Agent should pause at human checkpoint states."""
+        from subterminator.core.agent import AIBrowserAgent
+        from subterminator.core.protocols import ActionPlan, State, TargetStrategy
+
+        mock_browser = AsyncMock()
+        mock_browser.screenshot = AsyncMock(return_value=b"screenshot")
+        mock_browser.url = AsyncMock(return_value="https://netflix.com/cancel")
+        mock_browser.text_content = AsyncMock(return_value="Login required")
+        mock_browser.viewport_size = AsyncMock(return_value=(1920, 1080))
+        mock_browser.scroll_position = AsyncMock(return_value=(0, 0))
+        mock_browser.accessibility_tree = AsyncMock(return_value="{}")
+        mock_browser.evaluate = AsyncMock(return_value=[])
+
+        # First call detects login required, second call after human login shows complete
+        plan1 = ActionPlan(
+            action_type="click",
+            primary_target=TargetStrategy(method="css", css_selector="body"),
+            reasoning="Login page detected",
+            confidence=0.95,
+            continue_after=True,
+            detected_state=State.LOGIN_REQUIRED,
+        )
+        plan2 = ActionPlan(
+            action_type="click",
+            primary_target=TargetStrategy(method="css", css_selector="body"),
+            reasoning="Login complete, done",
+            confidence=0.95,
+            continue_after=False,
+            detected_state=State.COMPLETE,
+        )
+
+        mock_planner = Mock()
+        mock_planner.plan_action = AsyncMock(side_effect=[plan1, plan2])
+        mock_planner.SELF_CORRECT_PROMPT = ""
+
+        # Input callback allows continuing after human checkpoint
+        input_callback = Mock(return_value="")
+        output_callback = Mock()
+
+        agent = AIBrowserAgent(
+            browser=mock_browser,
+            planner=mock_planner,
+            max_retries=1,
+            input_callback=input_callback,
+            output_callback=output_callback,
+        )
+
+        result = await agent.run_agentic_loop(goal="Cancel subscription")
+
+        assert result.state == State.COMPLETE
+        # Should have called input callback for login checkpoint
+        input_callback.assert_called()
+
+    @pytest.mark.asyncio
+    async def test_action_type_none_stops_loop(self) -> None:
+        """Agent should stop when Claude returns action_type='none'."""
+        from subterminator.core.agent import AIBrowserAgent
+        from subterminator.core.protocols import ActionPlan, State, TargetStrategy
+
+        mock_browser = AsyncMock()
+        mock_browser.screenshot = AsyncMock(return_value=b"screenshot")
+        mock_browser.url = AsyncMock(return_value="https://netflix.com/cancel")
+        mock_browser.text_content = AsyncMock(return_value="Complete")
+        mock_browser.viewport_size = AsyncMock(return_value=(1920, 1080))
+        mock_browser.scroll_position = AsyncMock(return_value=(0, 0))
+        mock_browser.accessibility_tree = AsyncMock(return_value="{}")
+        mock_browser.evaluate = AsyncMock(return_value=[])
+
+        # Claude says no action needed (action_type="none")
+        plan = ActionPlan(
+            action_type="click",  # Will be overridden to "none"
+            primary_target=TargetStrategy(method="css", css_selector="body"),
+            reasoning="No action needed - already complete",
+            confidence=0.95,
+            continue_after=False,
+            detected_state=State.COMPLETE,
+        )
+        # Manually set action_type to "none" after creation
+        object.__setattr__(plan, "action_type", "none")
+
+        mock_planner = Mock()
+        mock_planner.plan_action = AsyncMock(return_value=plan)
+        mock_planner.SELF_CORRECT_PROMPT = ""
+
+        agent = AIBrowserAgent(
+            browser=mock_browser,
+            planner=mock_planner,
+            max_retries=1
+        )
+
+        result = await agent.run_agentic_loop(goal="Cancel subscription")
+
+        assert result.state == State.COMPLETE
+        # No browser actions should have been executed
+        assert mock_browser.click_by_bbox.call_count == 0
+
+
 class TestTryBboxClick:
     """Tests for _try_bbox_click method."""
 

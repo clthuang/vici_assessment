@@ -598,10 +598,10 @@ class TestHandleStateUnknown:
     """Tests for UNKNOWN state handling."""
 
     @pytest.mark.asyncio
-    async def test_unknown_state_navigates_to_entry_url_for_recovery(
+    async def test_unknown_state_without_agent_returns_failed(
         self, tmp_path: Path
     ) -> None:
-        """UNKNOWN state should navigate to entry_url before re-detection."""
+        """UNKNOWN state without agent should return FAILED (AI-first architecture)."""
         from unittest.mock import AsyncMock
 
         from subterminator.core.ai import HeuristicInterpreter
@@ -621,7 +621,12 @@ class TestHandleStateUnknown:
         )
         config = AppConfig(anthropic_api_key=None, output_dir=tmp_path)
 
-        # Create engine with mocked input callback
+        captured_messages: list[tuple[str, str]] = []
+
+        def capture_output(state: str, msg: str) -> None:
+            captured_messages.append((state, msg))
+
+        # Create engine without agent (AI-first architecture)
         engine = CancellationEngine(
             service=service,
             browser=mock_browser,
@@ -629,16 +634,17 @@ class TestHandleStateUnknown:
             ai=None,
             session=session,
             config=config,
-            input_callback=lambda checkpoint, timeout: "",  # Simulate Enter press
+            output_callback=capture_output,
+            agent=None,  # No agent - should fail gracefully
         )
 
         # Call _handle_state for UNKNOWN
-        await engine._handle_state(State.UNKNOWN)
+        result = await engine._handle_state(State.UNKNOWN)
 
-        # Verify navigation was called with entry_url after human checkpoint
-        mock_browser.navigate.assert_called_once_with(
-            service.entry_url, config.page_timeout
-        )
+        # Without agent, should return FAILED (AI-first architecture)
+        assert result == State.FAILED
+        # Should have logged appropriate message
+        assert any("No AI agent" in msg for _, msg in captured_messages)
 
 
 class TestModuleExports:
@@ -1069,19 +1075,16 @@ class TestElementNotFoundRecovery:
     """Tests for graceful degradation when ElementNotFound occurs."""
 
     @pytest.mark.asyncio
-    async def test_account_active_element_not_found_transitions_to_unknown(
+    async def test_account_active_without_agent_returns_failed(
         self, tmp_path: Path
     ) -> None:
-        """ACCOUNT_ACTIVE handler should transition to UNKNOWN on ElementNotFound."""
+        """ACCOUNT_ACTIVE without agent should return FAILED (AI-first architecture)."""
         from subterminator.core.ai import HeuristicInterpreter
         from subterminator.core.engine import CancellationEngine
-        from subterminator.utils.exceptions import ElementNotFound
         from subterminator.utils.session import SessionLogger
 
         mock_service = MockService()
         mock_browser = AsyncMock()
-        # Simulate ElementNotFound when clicking cancel_link
-        mock_browser.click = AsyncMock(side_effect=ElementNotFound("Cancel button"))
 
         session = SessionLogger(
             output_dir=tmp_path, service="test", target="test@example.com"
@@ -1101,34 +1104,28 @@ class TestElementNotFoundRecovery:
             session=session,
             config=config,
             output_callback=capture_output,
+            agent=None,  # No agent - AI-first architecture
         )
 
-        # Handle ACCOUNT_ACTIVE state
+        # Handle ACCOUNT_ACTIVE state without agent
         next_state = await engine._handle_state(State.ACCOUNT_ACTIVE)
 
-        # Should transition to UNKNOWN for human intervention
-        assert next_state == State.UNKNOWN
-        # Should log the error
-        error_messages = [
-            msg for state, msg in captured_messages
-            if "not found" in msg.lower()
-        ]
-        assert len(error_messages) == 1
-        assert "human assistance" in error_messages[0].lower()
+        # AI-first architecture: without agent, should return FAILED
+        assert next_state == State.FAILED
+        # Should log message about no AI agent
+        assert any("No AI agent" in msg for _, msg in captured_messages)
 
     @pytest.mark.asyncio
-    async def test_retention_offer_element_not_found_transitions_to_unknown(
+    async def test_retention_offer_without_agent_returns_failed(
         self, tmp_path: Path
     ) -> None:
-        """RETENTION_OFFER handler should transition to UNKNOWN on ElementNotFound."""
+        """RETENTION_OFFER without agent should return FAILED (AI-first architecture)."""
         from subterminator.core.ai import HeuristicInterpreter
         from subterminator.core.engine import CancellationEngine
-        from subterminator.utils.exceptions import ElementNotFound
         from subterminator.utils.session import SessionLogger
 
         mock_service = MockService()
         mock_browser = AsyncMock()
-        mock_browser.click = AsyncMock(side_effect=ElementNotFound("Decline button"))
 
         session = SessionLogger(
             output_dir=tmp_path, service="test", target="test@example.com"
@@ -1148,30 +1145,25 @@ class TestElementNotFoundRecovery:
             session=session,
             config=config,
             output_callback=capture_output,
+            agent=None,  # No agent - AI-first architecture
         )
 
         next_state = await engine._handle_state(State.RETENTION_OFFER)
 
-        assert next_state == State.UNKNOWN
-        error_messages = [
-            msg for state, msg in captured_messages
-            if "not found" in msg.lower()
-        ]
-        assert len(error_messages) == 1
+        # AI-first architecture: without agent, should return FAILED
+        assert next_state == State.FAILED
 
     @pytest.mark.asyncio
-    async def test_final_confirmation_element_not_found_transitions_to_unknown(
+    async def test_final_confirmation_without_agent_returns_failed(
         self, tmp_path: Path
     ) -> None:
-        """FINAL_CONFIRMATION handler should transition to UNKNOWN on ElementNotFound."""
+        """FINAL_CONFIRMATION without agent should return FAILED (AI-first architecture)."""
         from subterminator.core.ai import HeuristicInterpreter
         from subterminator.core.engine import CancellationEngine
-        from subterminator.utils.exceptions import ElementNotFound
         from subterminator.utils.session import SessionLogger
 
         mock_service = MockService()
         mock_browser = AsyncMock()
-        mock_browser.click = AsyncMock(side_effect=ElementNotFound("Confirm button"))
 
         session = SessionLogger(
             output_dir=tmp_path, service="test", target="test@example.com"
@@ -1191,34 +1183,36 @@ class TestElementNotFoundRecovery:
             session=session,
             config=config,
             output_callback=capture_output,
-            input_callback=lambda checkpoint, timeout: "confirm",  # Pass confirmation
+            agent=None,  # No agent - AI-first architecture
         )
 
         next_state = await engine._handle_state(State.FINAL_CONFIRMATION)
 
-        assert next_state == State.UNKNOWN
-        error_messages = [
-            msg for state, msg in captured_messages
-            if "not found" in msg.lower()
-        ]
-        assert len(error_messages) == 1
+        # AI-first architecture: without agent, should return FAILED
+        assert next_state == State.FAILED
 
     @pytest.mark.asyncio
-    async def test_account_active_success_does_not_transition_to_unknown(
+    async def test_account_active_with_agent_delegates_to_ai(
         self, tmp_path: Path
     ) -> None:
-        """ACCOUNT_ACTIVE handler should proceed normally when click succeeds."""
+        """ACCOUNT_ACTIVE with agent should delegate to AI (AI-first architecture)."""
+        from subterminator.core.agent import AgentResult
         from subterminator.core.ai import HeuristicInterpreter
         from subterminator.core.engine import CancellationEngine
         from subterminator.utils.session import SessionLogger
 
         mock_service = MockService()
         mock_browser = AsyncMock()
-        # Simulate successful click and page content for state detection
-        mock_browser.click = AsyncMock(return_value=None)
         mock_browser.url = AsyncMock(return_value="https://test.example.com/account")
-        mock_browser.text_content = AsyncMock(return_value="Why are you leaving?")
+        mock_browser.text_content = AsyncMock(return_value="Cancel membership Account")
         mock_browser.screenshot = AsyncMock(return_value=b"fake_screenshot")
+
+        # Mock agent that returns EXIT_SURVEY
+        mock_agent = AsyncMock()
+        mock_agent.run_agentic_loop = AsyncMock(
+            return_value=AgentResult(state=State.EXIT_SURVEY, message="Clicked cancel", steps=1)
+        )
+        mock_agent.clear_history = MagicMock()
 
         session = SessionLogger(
             output_dir=tmp_path, service="test", target="test@example.com"
@@ -1232,12 +1226,14 @@ class TestElementNotFoundRecovery:
             ai=None,
             session=session,
             config=config,
+            agent=mock_agent,  # With agent - AI-first architecture
         )
 
         next_state = await engine._handle_state(State.ACCOUNT_ACTIVE)
 
-        # Should detect EXIT_SURVEY from "Why are you leaving?" text
+        # AI-first: should delegate to agent and return its result
         assert next_state == State.EXIT_SURVEY
+        mock_agent.run_agentic_loop.assert_called_once()
 
 
 # --- Phase 5: Engine Integration with AIBrowserAgent ---
@@ -1591,8 +1587,10 @@ class TestEngineAgentParameter:
         assert engine.agent is None
 
     @pytest.mark.asyncio
-    async def test_engine_without_agent_uses_hardcoded(self, tmp_path: Path) -> None:
-        """Engine with agent=None should use hardcoded state handling."""
+    async def test_engine_without_agent_fails_on_non_terminal_states(
+        self, tmp_path: Path
+    ) -> None:
+        """Engine with agent=None should fail for non-terminal states (AI-first)."""
         from subterminator.core.ai import HeuristicInterpreter
         from subterminator.core.engine import CancellationEngine
         from subterminator.utils.session import SessionLogger
@@ -1602,8 +1600,9 @@ class TestEngineAgentParameter:
         mock_browser.launch = AsyncMock()
         mock_browser.close = AsyncMock()
         mock_browser.navigate = AsyncMock()
-        mock_browser.url = AsyncMock(return_value="https://example.com")
-        mock_browser.text_content = AsyncMock(return_value="Cancellation is complete")
+        # Return ACCOUNT_ACTIVE which requires AI agent
+        mock_browser.url = AsyncMock(return_value="https://example.com/account")
+        mock_browser.text_content = AsyncMock(return_value="Cancel membership Account")
         mock_browser.screenshot = AsyncMock(return_value=b"fake")
 
         session = SessionLogger(
@@ -1618,20 +1617,21 @@ class TestEngineAgentParameter:
             ai=None,
             session=session,
             config=config,
-            agent=None,  # Explicitly no agent
+            agent=None,  # Explicitly no agent - AI-first architecture
         )
 
         result = await engine.run()
 
-        # Should have completed using hardcoded flow
+        # AI-first architecture: without agent, should fail on non-terminal states
         mock_browser.launch.assert_called_once()
-        assert result.state == State.COMPLETE
+        assert result.state == State.FAILED
 
     @pytest.mark.asyncio
-    async def test_engine_with_agent_delegates_handle_state(
+    async def test_engine_with_agent_delegates_to_agentic_loop(
         self, tmp_path: Path
     ) -> None:
-        """Engine with agent should delegate to agent.handle_state()."""
+        """Engine with agent should delegate to agent.run_agentic_loop()."""
+        from subterminator.core.agent import AgentResult
         from subterminator.core.ai import HeuristicInterpreter
         from subterminator.core.engine import CancellationEngine
         from subterminator.utils.session import SessionLogger
@@ -1646,9 +1646,11 @@ class TestEngineAgentParameter:
         mock_browser.text_content = AsyncMock(return_value="Cancel membership Account")
         mock_browser.screenshot = AsyncMock(return_value=b"fake")
 
-        # Mock agent that returns COMPLETE on handle_state
+        # Mock agent that returns COMPLETE on run_agentic_loop
         mock_agent = AsyncMock()
-        mock_agent.handle_state = AsyncMock(return_value=State.COMPLETE)
+        mock_agent.run_agentic_loop = AsyncMock(
+            return_value=AgentResult(state=State.COMPLETE, message="Done", steps=1)
+        )
         mock_agent.clear_history = MagicMock()
 
         session = SessionLogger(
@@ -1668,8 +1670,8 @@ class TestEngineAgentParameter:
 
         result = await engine.run()
 
-        # Agent's handle_state should have been called for ACCOUNT_ACTIVE
-        mock_agent.handle_state.assert_called_with(State.ACCOUNT_ACTIVE)
+        # Agent's run_agentic_loop should have been called
+        mock_agent.run_agentic_loop.assert_called()
         mock_agent.clear_history.assert_called_once()
         assert result.state == State.COMPLETE
 
@@ -1678,6 +1680,7 @@ class TestEngineAgentParameter:
         self, tmp_path: Path
     ) -> None:
         """Engine should use hardcoded handling for START and LOGIN_REQUIRED."""
+        from subterminator.core.agent import AgentResult
         from subterminator.core.ai import HeuristicInterpreter
         from subterminator.core.engine import CancellationEngine
         from subterminator.utils.session import SessionLogger
@@ -1703,7 +1706,9 @@ class TestEngineAgentParameter:
         mock_browser.screenshot = AsyncMock(return_value=b"fake")
 
         mock_agent = AsyncMock()
-        mock_agent.handle_state = AsyncMock(return_value=State.COMPLETE)
+        mock_agent.run_agentic_loop = AsyncMock(
+            return_value=AgentResult(state=State.COMPLETE, message="Done", steps=1)
+        )
         mock_agent.clear_history = MagicMock()
 
         session = SessionLogger(
@@ -1730,8 +1735,10 @@ class TestEngineAgentParameter:
         assert result.success is True
 
     @pytest.mark.asyncio
-    async def test_engine_fallback_on_api_error(self, tmp_path: Path) -> None:
-        """Engine should fall back to hardcoded on API errors."""
+    async def test_engine_propagates_api_error_no_fallback(
+        self, tmp_path: Path
+    ) -> None:
+        """Engine should propagate API errors - no fallback (AI-first architecture)."""
         import anthropic as anthropic_module
 
         from subterminator.core.ai import HeuristicInterpreter
@@ -1744,24 +1751,14 @@ class TestEngineAgentParameter:
         mock_browser.close = AsyncMock()
         mock_browser.navigate = AsyncMock()
         mock_browser.click = AsyncMock()
-        # Returns ACCOUNT_ACTIVE first, then COMPLETE after action
-        mock_browser.url = AsyncMock(
-            side_effect=[
-                "https://example.com/account",
-                "https://example.com/complete",
-            ]
-        )
-        mock_browser.text_content = AsyncMock(
-            side_effect=[
-                "Cancel membership Account",  # ACCOUNT_ACTIVE
-                "Cancellation is complete",  # COMPLETE
-            ]
-        )
+        # Returns ACCOUNT_ACTIVE first
+        mock_browser.url = AsyncMock(return_value="https://example.com/account")
+        mock_browser.text_content = AsyncMock(return_value="Cancel membership Account")
         mock_browser.screenshot = AsyncMock(return_value=b"fake")
 
-        # Mock agent that raises API error
+        # Mock agent that raises API error on run_agentic_loop
         mock_agent = AsyncMock()
-        mock_agent.handle_state = AsyncMock(
+        mock_agent.run_agentic_loop = AsyncMock(
             side_effect=anthropic_module.APIConnectionError(request=MagicMock())
         )
         mock_agent.clear_history = MagicMock()
@@ -1783,7 +1780,7 @@ class TestEngineAgentParameter:
 
         result = await engine.run()
 
-        # Should have fallen back to hardcoded and succeeded
-        mock_agent.handle_state.assert_called()
-        mock_browser.click.assert_called()  # Hardcoded click action
-        assert result.success is True
+        # AI-first architecture: API error propagates, no fallback to hardcoded
+        mock_agent.run_agentic_loop.assert_called()
+        mock_browser.click.assert_not_called()  # No hardcoded click
+        assert result.success is False  # Should fail without fallback

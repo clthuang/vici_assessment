@@ -1297,3 +1297,144 @@ class TestClaudeActionPlannerPrompts:
         assert hasattr(planner, "SELF_CORRECT_PROMPT")
         assert "{action_type}" in planner.SELF_CORRECT_PROMPT
         assert "{strategies_tried}" in planner.SELF_CORRECT_PROMPT
+
+
+# --- Agentic Loop Tool Schema Tests ---
+
+
+class TestClaudeActionPlannerAgenticLoopSchema:
+    """Tests for agentic loop fields in TOOL_SCHEMA."""
+
+    def test_tool_schema_has_continue_after(self) -> None:
+        """TOOL_SCHEMA should have continue_after field."""
+        from subterminator.core.ai import ClaudeActionPlanner
+
+        planner = ClaudeActionPlanner(api_key="test-key")
+        props = planner.TOOL_SCHEMA["input_schema"]["properties"]
+
+        assert "continue_after" in props
+        assert props["continue_after"]["type"] == "boolean"
+
+    def test_tool_schema_has_detected_state(self) -> None:
+        """TOOL_SCHEMA should have detected_state field."""
+        from subterminator.core.ai import ClaudeActionPlanner
+
+        planner = ClaudeActionPlanner(api_key="test-key")
+        props = planner.TOOL_SCHEMA["input_schema"]["properties"]
+
+        assert "detected_state" in props
+        assert "enum" in props["detected_state"]
+
+    def test_action_type_includes_none(self) -> None:
+        """action_type enum should include 'none' for no-action responses."""
+        from subterminator.core.ai import ClaudeActionPlanner
+
+        planner = ClaudeActionPlanner(api_key="test-key")
+        action_type_enum = planner.TOOL_SCHEMA["input_schema"]["properties"]["action_type"]["enum"]
+
+        assert "none" in action_type_enum
+
+
+class TestClaudeActionPlannerParseActionPlanAgenticLoop:
+    """Tests for _parse_action_plan with agentic loop fields."""
+
+    def test_parse_action_plan_with_continue_after_true(self) -> None:
+        """_parse_action_plan should parse continue_after=True."""
+        from subterminator.core.ai import ClaudeActionPlanner
+
+        planner = ClaudeActionPlanner(api_key="test-key")
+
+        tool_input = {
+            "state": "ACCOUNT_ACTIVE",
+            "action_type": "click",
+            "targets": [{"method": "css", "css": "#btn"}],
+            "reasoning": "Click button",
+            "confidence": 0.9,
+            "continue_after": True,
+            "detected_state": "ACCOUNT_ACTIVE",
+        }
+
+        result = planner._parse_action_plan(tool_input)
+
+        assert result.continue_after is True
+
+    def test_parse_action_plan_with_continue_after_false(self) -> None:
+        """_parse_action_plan should parse continue_after=False."""
+        from subterminator.core.ai import ClaudeActionPlanner
+
+        planner = ClaudeActionPlanner(api_key="test-key")
+
+        tool_input = {
+            "state": "COMPLETE",
+            "action_type": "none",
+            "targets": [{"method": "css", "css": "body"}],
+            "reasoning": "Goal complete",
+            "confidence": 0.95,
+            "continue_after": False,
+            "detected_state": "COMPLETE",
+        }
+
+        result = planner._parse_action_plan(tool_input)
+
+        assert result.continue_after is False
+        assert result.action_type == "none"
+
+    def test_parse_action_plan_with_detected_state(self) -> None:
+        """_parse_action_plan should parse detected_state."""
+        from subterminator.core.ai import ClaudeActionPlanner
+        from subterminator.core.protocols import State
+
+        planner = ClaudeActionPlanner(api_key="test-key")
+
+        tool_input = {
+            "state": "RETENTION_OFFER",
+            "action_type": "click",
+            "targets": [{"method": "css", "css": "#decline"}],
+            "reasoning": "Decline offer",
+            "confidence": 0.85,
+            "continue_after": True,
+            "detected_state": "RETENTION_OFFER",
+        }
+
+        result = planner._parse_action_plan(tool_input)
+
+        assert result.detected_state == State.RETENTION_OFFER
+
+    def test_parse_action_plan_defaults_continue_after_to_true(self) -> None:
+        """_parse_action_plan should default continue_after to True."""
+        from subterminator.core.ai import ClaudeActionPlanner
+
+        planner = ClaudeActionPlanner(api_key="test-key")
+
+        tool_input = {
+            "state": "ACCOUNT_ACTIVE",
+            "action_type": "click",
+            "targets": [{"method": "css", "css": "#btn"}],
+            "reasoning": "Click button",
+            "confidence": 0.9,
+            # No continue_after field
+        }
+
+        result = planner._parse_action_plan(tool_input)
+
+        assert result.continue_after is True
+
+    def test_parse_action_plan_uses_state_as_detected_state_fallback(self) -> None:
+        """_parse_action_plan should use 'state' as fallback for detected_state."""
+        from subterminator.core.ai import ClaudeActionPlanner
+        from subterminator.core.protocols import State
+
+        planner = ClaudeActionPlanner(api_key="test-key")
+
+        tool_input = {
+            "state": "EXIT_SURVEY",
+            "action_type": "click",
+            "targets": [{"method": "css", "css": "#submit"}],
+            "reasoning": "Submit survey",
+            "confidence": 0.8,
+            # No detected_state field, should use 'state' as fallback
+        }
+
+        result = planner._parse_action_plan(tool_input)
+
+        assert result.detected_state == State.EXIT_SURVEY
