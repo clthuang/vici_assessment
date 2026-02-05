@@ -1,0 +1,144 @@
+{
+  "id": "007",
+  "slug": "ai-mcp-browser-control",
+  "title": "AI Browser Orchestration via Existing MCP Tools",
+  "status": "active",
+  "branch": "feature/007-ai-mcp-browser-control",
+  "mode": "Standard",
+  "currentPhase": "design",
+  "phases": {
+    "brainstorm": {
+      "started": "2026-02-05T10:00:00Z",
+      "completed": "2026-02-05T15:30:00Z",
+      "notes": [
+        "PIVOT: Original approach (custom browser tools) replaced with orchestration approach",
+        "New approach leverages existing MCP servers (Playwright MCP, browser-use)",
+        "Focus on thin orchestration layer + service-specific logic",
+        "Old artifacts archived in ./archive/"
+      ]
+    },
+    "specify": {
+      "started": "2026-02-05T15:45:00Z",
+      "completed": "2026-02-05T17:15:00Z",
+      "iterations": 2,
+      "stages": {
+        "specSkeptic": {
+          "iterations": 2,
+          "approved": true
+        },
+        "phaseReview": {
+          "iterations": 2,
+          "approved": true
+        }
+      },
+      "reviewerNotes": []
+    },
+    "design": {
+      "started": "2026-02-05T17:30:00Z",
+      "completed": "2026-02-05T18:30:00Z",
+      "stages": {
+        "architecture": {
+          "started": "2026-02-05T17:30:00Z",
+          "completed": "2026-02-05T17:45:00Z"
+        },
+        "interface": {
+          "started": "2026-02-05T17:45:00Z",
+          "completed": "2026-02-05T18:00:00Z"
+        },
+        "designReview": {
+          "started": "2026-02-05T18:00:00Z",
+          "completed": "2026-02-05T18:25:00Z",
+          "iterations": 2,
+          "reviewerNotes": [
+            "ToolCall.args vs spec ToolCall.arguments - documented divergence from spec to match LangChain",
+            "Reconnection trigger points to be defined in plan phase"
+          ]
+        },
+        "handoffReview": {
+          "started": "2026-02-05T18:25:00Z",
+          "completed": "2026-02-05T18:30:00Z",
+          "approved": true,
+          "reviewerNotes": []
+        }
+      }
+    },
+    "create-plan": {
+      "started": "2026-02-05T18:35:00Z",
+      "completed": "2026-02-05T19:15:00Z",
+      "iterations": 2,
+      "stages": {
+        "planReview": {
+          "iterations": 2,
+          "approved": true
+        },
+        "chainReview": {
+          "iterations": 2,
+          "approved": true
+        }
+      },
+      "reviewerNotes": [
+        "Plan-reviewer: markdown parser format may vary - validated with POC",
+        "Phase-reviewer: Existing CLI uses Typer (not Click) - updated plan",
+        "Phase-reviewer: ToolCall.args vs spec.arguments divergence documented"
+      ]
+    },
+    "create-tasks": {
+      "started": "2026-02-05T19:20:00Z",
+      "completed": "2026-02-05T21:30:00Z",
+      "taskReview": {
+        "iterations": 6,
+        "approved": true,
+        "concerns": []
+      },
+      "chainReview": {
+        "iterations": 4,
+        "approved": true,
+        "concerns": []
+      }
+    },
+    "implement": {
+      "started": "2026-02-05T22:00:00Z",
+      "progress": {
+        "phase0_foundation": {
+          "completed_tasks": ["T0.1", "T0.2", "T0.3", "T0.4", "T0.5", "T0.6", "T0.7", "T0.8", "T0.9", "T0.11", "T0.13", "T0.14", "T0.15"],
+          "notes": ["Skipped T0.10 (discovery script) - format validated via fixtures", "T0.12 fixtures created inline in tests", "T0.16 LLM format validation deferred to integration tests"]
+        },
+        "phase1_core": {
+          "completed_tasks": ["T1.1", "T1.2", "T1.3", "T1.4", "T1.5", "T1.6", "T1.7", "T1.8", "T1.9", "T1.10", "T1.11", "T1.12"],
+          "notes": ["All core components implemented and tested"]
+        },
+        "phase2_orchestration": {
+          "completed_tasks": ["T2.1", "T2.2", "T2.3", "T2.4", "T2.5", "T2.6", "T2.7", "T2.8", "T2.9", "T2.10", "T2.11", "T2.12", "T2.13", "T2.14"],
+          "notes": ["TaskRunner fully implemented with all handlers and error recovery"]
+        },
+        "phase3_cli": {
+          "completed_tasks": ["T3.1", "T3.2", "T3.3", "T3.4", "T3.5"],
+          "notes": ["CLI --auto flag added with all options and exit codes"]
+        },
+        "phase4_integration": {
+          "completed_tasks": [],
+          "notes": ["Integration tests pending - require live MCP and LLM connections"]
+        }
+      },
+      "test_count": 128,
+      "files_created": [
+        "src/subterminator/mcp_orchestrator/__init__.py",
+        "src/subterminator/mcp_orchestrator/types.py",
+        "src/subterminator/mcp_orchestrator/exceptions.py",
+        "src/subterminator/mcp_orchestrator/mcp_client.py",
+        "src/subterminator/mcp_orchestrator/llm_client.py",
+        "src/subterminator/mcp_orchestrator/snapshot.py",
+        "src/subterminator/mcp_orchestrator/checkpoint.py",
+        "src/subterminator/mcp_orchestrator/task_runner.py",
+        "src/subterminator/mcp_orchestrator/services/__init__.py",
+        "src/subterminator/mcp_orchestrator/services/base.py",
+        "src/subterminator/mcp_orchestrator/services/registry.py",
+        "src/subterminator/mcp_orchestrator/services/netflix.py"
+      ]
+    }
+  },
+  "currentPhase": "implement",
+  "createdAt": "2026-02-05T10:00:00Z",
+  "pivotedAt": "2026-02-05T15:30:00Z",
+  "pivotReason": "Simplified architecture: orchestrate existing MCP tools instead of building custom browser control"
+}

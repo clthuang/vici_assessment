@@ -81,6 +81,7 @@ class NetflixService:
                 ),
                 confirm_cancel=SelectorConfig(
                     css=[
+                        "[data-uia='action-finish-cancellation']",
                         "[data-uia='confirm-cancel-btn']",
                         "button:has-text('Finish Cancellation')",
                         "button:has-text('Confirm Cancellation')",

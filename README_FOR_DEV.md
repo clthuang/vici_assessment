@@ -9,7 +9,8 @@ A comprehensive guide for developers working on the SubTerminator codebase.
 - [Architecture Overview](#architecture-overview)
 - [Layer-by-Layer Guide](#layer-by-layer-guide)
   - [CLI Layer](#cli-layer)
-  - [Orchestrator (Engine)](#orchestrator-engine)
+  - [Legacy Orchestrator (core/engine)](#legacy-orchestrator-coreengine)
+  - [MCP Orchestrator](#mcp-orchestrator)
   - [State Machine](#state-machine)
   - [Browser Automation](#browser-automation)
   - [AI Detection](#ai-detection)
@@ -25,38 +26,41 @@ A comprehensive guide for developers working on the SubTerminator codebase.
 
 ## Architecture Overview
 
-SubTerminator follows a layered architecture with clear separation of concerns:
+SubTerminator has two orchestration paths:
 
 ```
 CLI Layer (user interaction)
     |
-    v
-Orchestrator / Engine (coordination)
-    |
-    +---> State Machine (flow control)
-    |
-    +---> Browser (automation)
-    |
-    +---> AI Detection (page interpretation)
-    |
-    v
-Services (site-specific logic)
+    +---> Legacy Path (core/)              MCP Path (mcp_orchestrator/)
+    |     - State machine-driven           - LLM-driven tool orchestration
+    |     - Heuristic + AI detection       - Playwright MCP server
+    |     - Hardcoded selectors            - Dynamic page understanding
+    |                                       |
+    +---> Browser (Playwright)         +---> MCP Server (Playwright)
 ```
+
+### Two Orchestration Patterns
+
+| Aspect | Legacy (core/) | MCP (mcp_orchestrator/) |
+|--------|----------------|-------------------------|
+| **Approach** | State machine with explicit transitions | LLM decides next action each turn |
+| **Detection** | Heuristic patterns + Claude fallback | LLM interprets page snapshots |
+| **Selectors** | Hardcoded CSS/XPath per service | LLM uses element refs from snapshot |
+| **Flexibility** | Requires code changes for UI updates | Adapts to UI changes via reasoning |
+| **Cost** | Minimal API calls | API call per turn |
 
 ### Core Intuition
 
-1. **State machine drives the flow** - The cancellation process is modeled as explicit states with valid transitions. This prevents invalid navigation and provides clear debugging.
+1. **Human checkpoints for irreversible actions** - Authentication and final confirmation always require human interaction. The tool assists, never acts autonomously on critical decisions.
 
-2. **Heuristic detection first, AI fallback** - Fast URL/text pattern matching handles most cases. Claude Vision is only invoked when heuristics fail, saving API costs and latency.
+2. **Session logging for debugging** - Every state transition, screenshot, and AI call is logged.
 
-3. **Human checkpoints for irreversible actions** - Authentication and final confirmation always require human interaction. The tool assists, it never acts autonomously on critical decisions.
+3. **Service-specific configuration** - Each service defines its URLs, selectors, and predicates.
 
-4. **Session logging for debugging** - Every state transition, screenshot, and AI call is logged. When something fails, the session directory contains everything needed to diagnose and fix.
-
-### Data Flow
+### Data Flow (MCP Path)
 
 ```
-User runs: subterminator cancel netflix
+User runs: subterminator cancel netflix --orchestrate mcp
                 |
                 v
     +------------------------+
@@ -65,17 +69,17 @@ User runs: subterminator cancel netflix
                 |
                 v
     +------------------------+
-    | CancellationEngine     |  <-- Main loop: handle state -> detect -> transition
+    |     TaskRunner         |  <-- Main loop: snapshot -> LLM -> tool -> repeat
     +------------------------+
           |         |
           v         v
-    +---------+  +---------+
-    | Browser |  |   AI    |  <-- Navigate, click, screenshot / Interpret state
-    +---------+  +---------+
+    +---------+  +-----------+
+    | LLMClient| | MCPClient |  <-- Claude/GPT-4 / Playwright MCP
+    +---------+  +-----------+
           |
           v
     +------------------------+
-    | NetflixService         |  <-- Selectors, URLs, text indicators
+    | CheckpointHandler      |  <-- Human approval gates
     +------------------------+
 ```
 
@@ -92,26 +96,15 @@ The CLI layer handles user interaction using the [Typer](https://typer.tiangolo.
 #### Entry Point: `main.py`
 
 ```python
-# Key command definition
 @app.command()
 def cancel(
-    service: str | None = typer.Option(None, "--service", "-s"),  # Interactive if None
-    no_input: bool = typer.Option(False, "--no-input"),           # Disable prompts
-    plain: bool = typer.Option(False, "--plain"),                 # No colors/animations
-    dry_run: bool,          # --dry-run stops before final click
-    target: str,            # "live" or "mock"
-    headless: bool,         # --headless for CI
-    verbose: bool,          # --verbose for detailed output
-    output_dir: Path,       # --output-dir for artifacts
+    service: str | None = typer.Option(None, "--service", "-s"),
+    orchestrate: str = typer.Option("legacy", "--orchestrate"),  # "legacy" or "mcp"
+    dry_run: bool,
+    target: str,
+    ...
 ) -> None:
 ```
-
-The `cancel` command:
-1. Validates the service name
-2. Shows ToS disclaimer
-3. Creates all components (service, browser, AI, session logger)
-4. Runs the cancellation engine
-5. Reports result and sets exit code
 
 **Exit codes:**
 - `0`: Success
@@ -120,97 +113,29 @@ The `cancel` command:
 - `3`: Invalid arguments
 - `4`: Configuration error
 
-#### Output Formatting: `output.py`
-
-`OutputFormatter` handles all user-facing messages:
-
-```python
-formatter = OutputFormatter(verbose=True)
-formatter.show_progress("STATE_NAME", "Message")  # Step indicator
-formatter.show_warning("Warning text")            # Yellow warning
-formatter.show_success(result)                    # Green success box
-formatter.show_failure(result)                    # Red failure with diagnostics
-```
-
-Human prompts use `PromptType` enum:
-- `AUTH`: Login required
-- `CONFIRM`: Final cancellation confirmation
-- `UNKNOWN`: Page state unclear
-
 ---
 
-### Orchestrator (Engine)
+### Legacy Orchestrator (core/engine)
 
 **Location:** `src/subterminator/core/engine.py`
 
-The `CancellationEngine` is the heart of SubTerminator. It coordinates all components through a main loop.
+The `CancellationEngine` coordinates the legacy state machine approach.
 
 #### Key Methods
 
-**`run(dry_run: bool) -> CancellationResult`**
-
-The main entry point. Launches browser, runs state loop, handles exceptions:
+**`run(dry_run: bool) -> CancellationResult`** - Main entry point:
 
 ```python
 async def run(self, dry_run: bool = False) -> CancellationResult:
-    try:
-        await self.browser.launch()
-
-        while not self._is_terminal_state():
-            if self._step >= self.config.max_transitions:
-                return self._complete(False, State.FAILED, "Max transitions exceeded")
-
-            next_state = await self._handle_state(self._current_state)
-            self._transition_to(next_state)
-            self._step += 1
-
-        # Determine result from final state
-        success = self._current_state in (State.COMPLETE, State.ACCOUNT_CANCELLED)
-        return self._complete(success, self._current_state, self._get_result_message())
-
-    except UserAborted:
-        return self._complete(False, State.ABORTED, "User aborted")
-    finally:
-        await self.browser.close()
+    while not self._is_terminal_state():
+        next_state = await self._handle_state(self._current_state)
+        self._transition_to(next_state)
 ```
 
-**`_handle_state(state: State) -> State`**
-
-The state handler - takes action based on current state:
-
-```python
-async def _handle_state(self, state: State) -> State:
-    if state == State.START:
-        await self.browser.navigate(self.service.entry_url)
-        return await self._detect_state()
-
-    elif state == State.LOGIN_REQUIRED:
-        await self._human_checkpoint("AUTH", timeout)
-        return await self._detect_state()
-
-    elif state == State.ACCOUNT_ACTIVE:
-        await self.browser.click(self.service.selectors.cancel_link)
-        return await self._detect_state()
-
-    elif state == State.FINAL_CONFIRMATION:
-        if self.dry_run:
-            return State.COMPLETE  # Skip actual click
-        await self._human_checkpoint("CONFIRM", timeout)
-        await self.browser.click(self.service.selectors.confirm_cancel)
-        return await self._detect_state()
-
-    # ... other states
-```
-
-**`_detect_state() -> State`**
-
-Detection cascade - heuristic first, then AI:
+**`_detect_state() -> State`** - Detection cascade:
 
 ```python
 async def _detect_state(self) -> State:
-    url = await self.browser.url()
-    text = await self.browser.text_content()
-
     # Try heuristic first (fast, free)
     result = self.heuristic.interpret(url, text)
     if result.confidence >= 0.7:
@@ -218,7 +143,6 @@ async def _detect_state(self) -> State:
 
     # Fall back to AI (slower, costs money)
     if self.ai:
-        screenshot = await self.browser.screenshot()
         ai_result = await self.ai.interpret(screenshot)
         if ai_result.confidence >= 0.5:
             return ai_result.state
@@ -226,21 +150,148 @@ async def _detect_state(self) -> State:
     return State.UNKNOWN
 ```
 
-**`_human_checkpoint(checkpoint_type: str, timeout: int)`**
+---
 
-Pauses for human input:
+### MCP Orchestrator
+
+**Location:** `src/subterminator/mcp_orchestrator/`
+
+The MCP orchestrator uses LLM-driven tool selection with Playwright MCP server.
+
+#### Module Structure
+
+| File | Responsibility |
+|------|----------------|
+| `task_runner.py` | Main orchestration loop, virtual tools |
+| `llm_client.py` | Claude/GPT-4 via LangChain |
+| `mcp_client.py` | Playwright MCP server connection |
+| `checkpoint.py` | Human approval gates, auth detection |
+| `snapshot.py` | Parse browser_snapshot output |
+| `types.py` | TaskResult, ToolCall, NormalizedSnapshot |
+| `exceptions.py` | Custom exception types |
+| `services/` | Service-specific configurations |
+
+#### TaskRunner (`task_runner.py`)
+
+The main loop executes one tool per turn:
 
 ```python
-async def _human_checkpoint(self, checkpoint_type: str, timeout: int) -> None:
-    # Show appropriate message
-    self.output_callback(checkpoint_type, messages[checkpoint_type])
-
-    # Wait for input
-    if self.input_callback:
-        response = self.input_callback(checkpoint_type, timeout)
-        if checkpoint_type == "CONFIRM" and response != "confirm":
-            raise UserAborted("User did not confirm")
+class TaskRunner:
+    async def run(self, service: str, max_turns: int = 20) -> TaskResult:
+        # 1. Connect to MCP, get tools
+        # 2. Navigate to initial URL
+        # 3. Loop: snapshot -> LLM -> execute tool -> repeat
+        # 4. End on complete_task or max turns
 ```
+
+**Virtual Tools:**
+- `complete_task` - Signal task completion (success/failed)
+- `request_human_approval` - Explicit approval request
+
+**Flow per turn:**
+1. LLM receives current page snapshot
+2. LLM returns tool call (or text requiring prompting)
+3. Check if checkpoint needed
+4. Execute tool (MCP or virtual)
+5. Add result to message history
+6. Repeat
+
+#### LLMClient (`llm_client.py`)
+
+Abstracts Claude and GPT-4 via LangChain:
+
+```python
+class LLMClient:
+    def __init__(self, model_name: str | None = None):
+        # Resolves model from param -> env var -> default
+        # Supports claude-* and gpt-* prefixes
+
+    async def invoke(self, messages, tools) -> AIMessage:
+        # Converts messages/tools to LangChain format
+        # Handles retries with exponential backoff
+```
+
+**Model selection:**
+1. Explicit `model_name` parameter
+2. `SUBTERMINATOR_MODEL` env var
+3. Default: `claude-sonnet-4-20250514`
+
+#### MCPClient (`mcp_client.py`)
+
+Manages Playwright MCP server subprocess:
+
+```python
+class MCPClient:
+    async def connect(self):
+        # Starts npx @playwright/mcp@latest subprocess
+        # Initializes MCP session
+
+    async def list_tools(self) -> list[dict]:
+        # Returns available browser tools
+
+    async def call_tool(self, name: str, arguments: dict) -> str:
+        # Executes tool and returns result text
+```
+
+**Browser profile:** Uses `.chrome-profile/` in project root for session persistence.
+
+#### CheckpointHandler (`checkpoint.py`)
+
+Manages human approval:
+
+```python
+class CheckpointHandler:
+    def detect_auth_edge_case(snapshot, config) -> str | None:
+        # Returns "login", "captcha", "mfa", or None
+
+    def should_checkpoint(tool, snapshot, config) -> bool:
+        # Checks service's checkpoint_conditions predicates
+
+    async def request_approval(tool, snapshot) -> bool:
+        # Shows checkpoint UI, returns True if approved
+```
+
+**Auth flow:** When login/CAPTCHA/MFA detected, waits for user to complete in browser, then continues.
+
+#### Snapshot Parser (`snapshot.py`)
+
+Parses Playwright MCP's markdown output:
+
+```python
+def normalize_snapshot(text: str) -> NormalizedSnapshot:
+    # Extracts: url, title, content (accessibility tree)
+```
+
+**Input format:**
+```
+### Page
+- Page URL: https://example.com
+- Page Title: Example
+- generic [ref=s1e0]:
+  - banner [ref=s1e1]:
+  ...
+```
+
+#### Service Configs (`services/`)
+
+Each service defines:
+
+```python
+@dataclass
+class ServiceConfig:
+    name: str                    # "netflix"
+    initial_url: str             # Starting URL
+    goal_template: str           # LLM goal description
+    checkpoint_conditions: list  # When to require approval
+    success_indicators: list     # How to verify completion
+    failure_indicators: list     # How to detect failure
+    auth_edge_case_detectors: list  # Login/CAPTCHA/MFA detection
+    system_prompt_addition: str  # Service-specific LLM instructions
+```
+
+**Predicates:**
+- `SnapshotPredicate = Callable[[NormalizedSnapshot], bool]`
+- `CheckpointPredicate = Callable[[ToolCall, NormalizedSnapshot], bool]`
 
 ---
 
@@ -248,103 +299,24 @@ async def _human_checkpoint(self, checkpoint_type: str, timeout: int) -> None:
 
 **Location:** `src/subterminator/core/states.py`
 
-The `CancellationStateMachine` uses [python-statemachine](https://python-statemachine.readthedocs.io/) to define valid states and transitions.
+Used by the legacy orchestrator. See [State Machine section](#state-machine) for details on the 12 states and transitions.
 
-#### States (12 total)
+#### States
 
 | State | Type | Description |
 |-------|------|-------------|
-| `start` | Entry | Initial state before navigation |
+| `start` | Entry | Initial state |
 | `login_required` | Auth | Authentication needed |
-| `account_active` | Account | Logged in, subscription active |
-| `account_cancelled` | Account | Subscription already cancelled |
+| `account_active` | Account | Active subscription |
+| `account_cancelled` | Account | Already cancelled |
 | `third_party_billing` | Account | Billed through Apple/Google |
-| `retention_offer` | Flow | Discount/retention offer shown |
-| `exit_survey` | Flow | "Why are you leaving?" survey |
-| `final_confirmation` | Flow | Final "Finish Cancellation" button |
-| `complete` | Terminal | Cancellation successful |
+| `retention_offer` | Flow | Discount offer shown |
+| `exit_survey` | Flow | Survey page |
+| `final_confirmation` | Flow | Final button |
+| `complete` | Terminal | Success |
 | `aborted` | Terminal | User aborted |
 | `failed` | Terminal | Process failed |
-| `unknown` | Recovery | Unrecognized page state |
-
-#### Transitions (10 named transitions)
-
-```python
-# From start -> various states after page load
-navigate = (
-    start.to(login_required)
-    | start.to(account_active)
-    | start.to(account_cancelled)
-    | start.to(failed)
-    | start.to(unknown)
-)
-
-# From login_required -> various states after auth
-authenticate = (
-    login_required.to(account_active)
-    | login_required.to(account_cancelled)
-    | login_required.to(failed)
-)
-
-# From account_active -> cancel flow states
-click_cancel = (
-    account_active.to(retention_offer)
-    | account_active.to(exit_survey)
-    | account_active.to(final_confirmation)
-)
-
-# From retention_offer -> next step (can loop)
-decline_offer = (
-    retention_offer.to(retention_offer)  # Multiple offers
-    | retention_offer.to(exit_survey)
-    | retention_offer.to(final_confirmation)
-)
-
-# From final_confirmation -> terminal
-confirm = (
-    final_confirmation.to(complete)
-    | final_confirmation.to(failed)
-)
-```
-
-#### State Diagram
-
-```
-              +-------+
-              | START |
-              +---+---+
-                  |
-        +---------+---------+
-        |                   |
-        v                   v
-+---------------+    +--------------+
-| LOGIN_REQUIRED|    | ACCOUNT_ACTIVE|
-+-------+-------+    +-------+------+
-        |                    |
-        v                    v
-+---------------+    +----------------+
-| ACCOUNT_ACTIVE|    | RETENTION_OFFER|<--+
-+---------------+    +--------+-------+   |
-                             |            |
-                    +--------+--------+   |
-                    |                 |   |
-                    v                 +---+
-              +-----------+
-              | EXIT_SURVEY|
-              +-----+-----+
-                    |
-                    v
-          +------------------+
-          | FINAL_CONFIRMATION|
-          +--------+---------+
-                   |
-         +---------+---------+
-         |                   |
-         v                   v
-    +----------+        +--------+
-    | COMPLETE |        | FAILED |
-    +----------+        +--------+
-```
+| `unknown` | Recovery | Unrecognized state |
 
 ---
 
@@ -352,60 +324,7 @@ confirm = (
 
 **Location:** `src/subterminator/core/browser.py`
 
-`PlaywrightBrowser` wraps [Playwright](https://playwright.dev/python/) with stealth capabilities.
-
-#### Key Features
-
-**Stealth mode** - Uses [playwright-stealth](https://pypi.org/project/playwright-stealth/) to avoid bot detection:
-
-```python
-async def launch(self) -> None:
-    self._playwright = await async_playwright().start()
-    self._browser = await self._playwright.chromium.launch(headless=self.headless)
-    self._page = await self._browser.new_page()
-
-    # Apply stealth patches
-    stealth = Stealth()
-    await stealth.apply_stealth_async(self._page)
-```
-
-**Selector fallback** - Tries multiple selectors until one works:
-
-```python
-async def click(self, selector: str | list[str]) -> None:
-    selectors = [selector] if isinstance(selector, str) else selector
-    for sel in selectors:
-        try:
-            element = await self._page.wait_for_selector(sel, timeout=5000)
-            if element:
-                await element.scroll_into_view_if_needed()
-                await element.click()
-                return
-        except Exception:
-            continue
-    raise ElementNotFound(f"None of selectors found: {selectors}")
-```
-
-**Network idle waiting** - Waits for network to settle before proceeding:
-
-```python
-await self._page.goto(url, timeout=timeout, wait_until="networkidle")
-```
-
-#### BrowserProtocol
-
-The browser is abstracted via a protocol for testing:
-
-```python
-class BrowserProtocol(Protocol):
-    async def launch(self) -> None: ...
-    async def navigate(self, url: str, timeout: int = 30000) -> None: ...
-    async def click(self, selector: str | list[str]) -> None: ...
-    async def screenshot(self, path: str | None = None) -> bytes: ...
-    async def url(self) -> str: ...
-    async def text_content(self) -> str: ...
-    async def close(self) -> None: ...
-```
+`PlaywrightBrowser` wraps Playwright with stealth capabilities (used by legacy path).
 
 ---
 
@@ -413,82 +332,9 @@ class BrowserProtocol(Protocol):
 
 **Location:** `src/subterminator/core/ai.py`
 
-Two interpreters implement the detection cascade.
-
-#### HeuristicInterpreter
-
-Fast, rule-based detection using URL patterns and text content:
-
-```python
-class HeuristicInterpreter:
-    def interpret(self, url: str, text: str) -> AIInterpretation:
-        text_lower = text.lower()
-
-        # URL-based detection (high confidence)
-        if "/login" in url or "/signin" in url:
-            return AIInterpretation(State.LOGIN_REQUIRED, 0.95, "URL contains /login")
-
-        # Text-based detection
-        if "cancel membership" in text_lower and "/account" in url:
-            return AIInterpretation(State.ACCOUNT_ACTIVE, 0.85, "Cancel link found")
-
-        # Retention offer detection
-        if any(phrase in text_lower for phrase in ["before you go", "special offer"]):
-            return AIInterpretation(State.RETENTION_OFFER, 0.75, "Retention offer")
-
-        # ... more patterns
-
-        return AIInterpretation(State.UNKNOWN, 0.0, "No patterns matched")
-```
-
-**Detection priority:**
-1. URL patterns (highest confidence)
-2. Login form indicators
-3. Third-party billing indicators
-4. Retention offer phrases
-5. Survey phrases
-6. Confirmation button text
-7. Completion indicators
-8. Error indicators
-9. UNKNOWN fallback
-
-#### ClaudeInterpreter
-
-AI-powered detection using Claude Vision:
-
-```python
-class ClaudeInterpreter:
-    PROMPT_TEMPLATE = """Analyze this screenshot of a subscription cancellation flow.
-
-    Determine which state this page represents:
-    - LOGIN_REQUIRED: Login form is shown
-    - ACCOUNT_ACTIVE: Account page with active subscription
-    - RETENTION_OFFER: Discount or "stay with us" offer
-    - FINAL_CONFIRMATION: Final "Finish Cancellation" button
-    - COMPLETE: Cancellation confirmed
-    ...
-
-    Respond in JSON format:
-    {"state": "<STATE>", "confidence": <0.0-1.0>, "reasoning": "...", "actions": [...]}
-    """
-
-    async def interpret(self, screenshot: bytes) -> AIInterpretation:
-        image_data = base64.b64encode(screenshot).decode("utf-8")
-
-        response = self.client.messages.create(
-            model="claude-sonnet-4-20250514",
-            max_tokens=500,
-            messages=[{
-                "role": "user",
-                "content": [
-                    {"type": "image", "source": {"type": "base64", ...}},
-                    {"type": "text", "text": self.PROMPT_TEMPLATE},
-                ],
-            }],
-        )
-
-        return self._parse_response(response.content[0].text)
-```
+Two interpreters for the legacy path:
+- `HeuristicInterpreter` - URL/text pattern matching
+- `ClaudeInterpreter` - Vision-based detection
 
 ---
 
@@ -496,57 +342,7 @@ class ClaudeInterpreter:
 
 **Location:** `src/subterminator/services/`
 
-Services contain site-specific configuration.
-
-#### NetflixService
-
-```python
-class NetflixService:
-    def __init__(self, target: str = "live"):
-        self._config = ServiceConfig(
-            name="Netflix",
-            entry_url="https://www.netflix.com/account",
-            mock_entry_url="http://localhost:8000/account",
-            selectors=ServiceSelectors(
-                cancel_link=[
-                    "[data-uia='action-cancel-membership']",
-                    "a:has-text('Cancel Membership')",
-                    "button:has-text('Cancel Membership')",
-                ],
-                decline_offer=[
-                    "[data-uia='continue-cancel-btn']",
-                    "button:has-text('Continue to Cancel')",
-                ],
-                confirm_cancel=[
-                    "[data-uia='confirm-cancel-btn']",
-                    "button:has-text('Finish Cancellation')",
-                ],
-                # ...
-            ),
-            text_indicators={
-                "login": ["Sign In", "Email", "Password"],
-                "active": ["Cancel Membership", "Cancel Plan"],
-                "cancelled": ["Restart Membership"],
-                # ...
-            }
-        )
-```
-
-#### MockServer
-
-For local testing without hitting real Netflix:
-
-```python
-class MockServer:
-    def __init__(self, pages_dir: Path, port: int = 8000):
-        self.pages_dir = pages_dir
-        self.port = port
-
-    def start(self) -> None:
-        # Serves static HTML files mimicking Netflix pages
-        # Supports ?variant= parameter for different flows
-        pass
-```
+Site-specific configuration for both orchestration paths.
 
 ---
 
@@ -555,83 +351,34 @@ class MockServer:
 ### Initial Setup
 
 ```bash
-# Clone repository
 git clone <repo-url>
 cd subterminator
-
-# Dependencies managed by uv (creates .venv automatically)
 uv sync
-
-# Install browser binaries
 uv run playwright install chromium
 ```
 
 ### Running Tests
 
 ```bash
-# Unit tests (fast, no browser)
-uv run pytest tests/unit/ -v
-
-# Integration tests (uses mock server)
-uv run pytest tests/integration/ -v
-
-# All tests with coverage
-uv run pytest --cov=subterminator --cov-report=html
-
-# Specific test file
-uv run pytest tests/unit/test_engine.py -v
+uv run pytest tests/unit/ -v           # Unit tests
+uv run pytest tests/integration/ -v    # Integration tests
+uv run pytest --cov=subterminator      # With coverage
 ```
 
-### Linting and Type Checking
+### Linting
 
 ```bash
-# Linting with Ruff
 uv run ruff check src/
-uv run ruff check --fix src/  # Auto-fix issues
-
-# Type checking with mypy
+uv run ruff check --fix src/
 uv run mypy src/
 ```
 
-### Testing Against Mock Server
+### Testing MCP Orchestrator
 
 ```bash
-# Run with mock target (uses local test server)
-uv run subterminator cancel netflix --target mock --dry-run
-
-# Verbose output
-uv run subterminator cancel netflix --target mock --dry-run --verbose
+# Requires ANTHROPIC_API_KEY or OPENAI_API_KEY
+uv run subterminator cancel --service netflix --orchestrate mcp --dry-run
 ```
-
-### Git Workflow
-
-The repository uses an automated CI/CD pipeline that creates PRs and enables auto-merge.
-
-```bash
-# Create feature branch
-git checkout -b feature/my-feature
-
-# Make changes, run tests locally
-uv run pytest tests/unit/
-
-# Lint before commit
-uv run ruff check src/
-
-# Commit and push
-git commit -m "feat: add new feature"
-git push -u origin feature/my-feature
-```
-
-**What happens automatically:**
-
-1. **CI runs** - Lint, test (85% coverage required), and build jobs execute
-2. **PR created** - If all checks pass, a PR is auto-created targeting `main`
-3. **Auto-merge enabled** - PR will merge automatically after approval
-
-**Notes:**
-- Works for `feature/*` and `fix/*` branches
-- Requires branch protection on `main` for auto-merge (GitHub Pro/Team for private repos)
-- Uses squash merge with automatic branch deletion
 
 ---
 
@@ -639,204 +386,44 @@ git push -u origin feature/my-feature
 
 ### Adding a New Service
 
-To add support for a new subscription service (e.g., Spotify):
+**For MCP orchestrator:**
 
-**1. Create service file**
-
-```python
-# src/subterminator/services/spotify.py
-
-from dataclasses import dataclass
-from subterminator.services.netflix import ServiceSelectors, ServiceConfig
-
-class SpotifyService:
-    def __init__(self, target: str = "live"):
-        self.target = target
-        self._config = ServiceConfig(
-            name="Spotify",
-            entry_url="https://www.spotify.com/account",
-            mock_entry_url="http://localhost:8000/spotify/account",
-            selectors=ServiceSelectors(
-                cancel_link=[
-                    "[data-testid='cancel-button']",
-                    "button:has-text('Cancel Premium')",
-                ],
-                decline_offer=[...],
-                survey_option=[...],
-                survey_submit=[...],
-                confirm_cancel=[...],
-            ),
-            text_indicators={
-                "login": ["Log in", "Email address", "Password"],
-                "active": ["Cancel Premium", "Change plan"],
-                "cancelled": ["Get Premium again"],
-                # ...
-            }
-        )
-
-    @property
-    def entry_url(self) -> str:
-        return self._config.mock_entry_url if self.target == "mock" else self._config.entry_url
-
-    # ... other properties
-```
-
-**2. Update CLI**
+1. Create service config in `src/subterminator/mcp_orchestrator/services/`:
 
 ```python
-# src/subterminator/cli/main.py
+# myservice.py
+from .base import ServiceConfig
 
-from subterminator.services.registry import get_service_by_id, get_available_services
+def is_login_page(snapshot: NormalizedSnapshot) -> bool:
+    return "/login" in snapshot.url
 
-# Get available services
-services = get_available_services()  # Returns list of ServiceInfo
+def is_final_confirmation(tool: ToolCall, snapshot: NormalizedSnapshot) -> bool:
+    return "confirm" in tool.name and "cancel" in snapshot.content.lower()
 
-# Look up specific service
-service = get_service_by_id("netflix")  # Returns ServiceInfo or None
+myservice_config = ServiceConfig(
+    name="myservice",
+    initial_url="https://myservice.com/account",
+    goal_template="Cancel the MyService subscription",
+    checkpoint_conditions=[is_final_confirmation],
+    success_indicators=[lambda s: "cancelled" in s.content.lower()],
+    auth_edge_case_detectors=[is_login_page],
+)
 ```
 
-**3. Add heuristic patterns**
+2. Register in `services/registry.py`
 
-Update `HeuristicInterpreter` if service has unique patterns.
-
-**4. Create mock pages**
-
-Add HTML files to `tests/mock_pages/spotify/` for testing.
-
-**5. Write tests**
-
-```python
-# tests/unit/test_spotify_service.py
-
-def test_spotify_selectors():
-    service = SpotifyService()
-    assert "cancel" in service.selectors.cancel_link[0].lower()
-```
-
----
+3. Write tests in `tests/unit/mcp_orchestrator/`
 
 ### Adding a New State
 
-To add a new state to the cancellation flow:
-
-**1. Add to State enum**
-
-```python
-# src/subterminator/core/protocols.py
-
-class State(Enum):
-    # ... existing states
-    PAYMENT_UPDATE = auto()  # New state
-```
-
-**2. Add to state machine**
-
-```python
-# src/subterminator/core/states.py
-
-class CancellationStateMachine(StateMachine):
-    # ... existing states
-    payment_update = SMState()
-
-    # Add transitions
-    navigate = (
-        start.to(payment_update, cond="dest_is_payment_update")
-        | ...
-    )
-
-    # Add condition method
-    def dest_is_payment_update(self, dest: str) -> bool:
-        return dest == "payment_update"
-```
-
-**3. Add handler in engine**
-
-```python
-# src/subterminator/core/engine.py
-
-async def _handle_state(self, state: State) -> State:
-    # ... existing handlers
-    elif state == State.PAYMENT_UPDATE:
-        # Handle the new state
-        await self.browser.click(self.service.selectors.update_payment)
-        return await self._detect_state()
-```
-
-**4. Add detection patterns**
-
-```python
-# src/subterminator/core/ai.py
-
-class HeuristicInterpreter:
-    def interpret(self, url: str, text: str) -> AIInterpretation:
-        # ... existing patterns
-        if "update payment" in text_lower or "payment method" in text_lower:
-            return AIInterpretation(State.PAYMENT_UPDATE, 0.80, "Payment update detected")
-```
-
-**5. Update OutputFormatter colors**
-
-```python
-# src/subterminator/cli/output.py
-
-state_colors = {
-    # ... existing colors
-    "PAYMENT_UPDATE": "\033[33m",  # Yellow
-}
-```
-
----
+(For legacy orchestrator - see original documentation)
 
 ### Debugging Detection Issues
 
-When state detection fails:
-
-**1. Check session artifacts**
-
-```bash
-# Find latest session
-ls -la output/netflix_*/
-
-# View session log
-cat output/netflix_20260203_123456/session.json | jq .
-
-# View screenshots
-open output/netflix_20260203_123456/*.png
-```
-
-**2. Run with verbose mode**
-
-```bash
-subterminator cancel netflix --verbose --target mock
-```
-
-**3. Test heuristic directly**
-
-```python
-from subterminator.core.ai import HeuristicInterpreter
-
-interpreter = HeuristicInterpreter()
-result = interpreter.interpret(
-    url="https://www.netflix.com/account",
-    text="Cancel Membership ..."  # Page text
-)
-print(f"State: {result.state}, Confidence: {result.confidence}")
-```
-
-**4. Check pattern priority**
-
-The heuristic checks patterns in order. If a more specific pattern should match but a generic one matches first, reorder the checks in `HeuristicInterpreter.interpret()`.
-
-**5. Add new patterns**
-
-If pages consistently fail detection, add new patterns:
-
-```python
-# Add to appropriate list in HeuristicInterpreter
-new_phrases = ["new pattern 1", "new pattern 2"]
-if any(phrase in text_lower for phrase in new_phrases):
-    return AIInterpretation(State.TARGET_STATE, 0.75, "New pattern detected")
-```
+**MCP orchestrator:**
+- Run with `--verbose` to see LLM reasoning
+- Check message history in logs
+- Verify snapshot parsing with unit tests
 
 ---
 
@@ -844,85 +431,40 @@ if any(phrase in text_lower for phrase in new_phrases):
 
 ### ADR-1: Mock-First Development
 
-**Context:** Testing against live Netflix requires a paid subscription and risks account issues.
-
-**Decision:** Primary development and testing uses a local mock server with static HTML pages that simulate Netflix's cancellation flow.
-
-**Consequences:**
-- Fast, deterministic tests that run without network
-- Can test all flow variants (retention offer, survey, etc.)
-- Must keep mock pages updated when real UI changes
-- Need occasional manual verification against real site
-
----
+Testing uses local mock server with static HTML pages.
 
 ### ADR-2: python-statemachine for Flow Control
 
-**Context:** Subscription cancellation has complex, branching flows with many edge cases.
-
-**Decision:** Use python-statemachine library for explicit state management.
-
-**Consequences:**
-- Invalid state transitions are impossible at runtime
-- Easy to visualize and reason about the flow
-- Slight overhead vs simple if/else logic
-- Clear debugging - always know current state
-
----
+Legacy path uses explicit state machine for debugging clarity.
 
 ### ADR-3: Typer for CLI Framework
 
-**Context:** Need a modern CLI framework with good developer experience.
-
-**Decision:** Use Typer for CLI implementation.
-
-**Consequences:**
-- Automatic --help generation from type hints
-- Clean async support
-- Rich text output via Rich integration
-- Dependency on Typer ecosystem
-
----
+Modern CLI with automatic --help and async support.
 
 ### ADR-4: Heuristic Before AI Detection
 
-**Context:** Claude API calls cost money and add latency.
-
-**Decision:** Always try fast URL/text heuristics first. Only invoke Claude when heuristics return low confidence.
-
-**Consequences:**
-- Most page detections are instant and free
-- AI provides fallback for unknown/changed pages
-- Must maintain heuristic patterns
-- Confidence thresholds may need tuning
-
----
+Legacy path tries fast heuristics before expensive AI calls.
 
 ### ADR-5: Human Checkpoints for Safety
 
-**Context:** Cancellation is irreversible and affects user's subscription.
-
-**Decision:** Mandatory human confirmation for authentication and final cancellation. No fully autonomous operation.
-
-**Consequences:**
-- Users maintain control over critical actions
-- Cannot be used for fully automated batch operations
-- Better trust and safety guarantees
-- Aligns with responsible automation practices
-
----
+Mandatory human confirmation for auth and final cancellation.
 
 ### ADR-6: Session Logging for Observability
 
-**Context:** When automation fails, need to understand what happened.
+Full audit trail for debugging.
 
-**Decision:** Log every state transition, screenshot, and AI call to session directory.
+### ADR-7: MCP Orchestration Pattern
+
+**Context:** Subscription UIs change frequently, breaking hardcoded selectors.
+
+**Decision:** Add LLM-driven orchestration using Playwright MCP server. The LLM interprets page snapshots and decides actions, rather than following a fixed state machine.
 
 **Consequences:**
-- Full audit trail for debugging
-- Disk space usage for screenshots
-- Privacy consideration for logged data
-- Easy to share failure reports
+- More resilient to UI changes
+- Higher per-run cost (API call per turn)
+- Requires careful checkpoint design to prevent unintended actions
+- Single-tool-per-turn prevents runaway automation
+- Service configs use predicates instead of selectors
 
 ---
 
@@ -933,44 +475,33 @@ if any(phrase in text_lower for phrase in new_phrases):
 | Component | Path |
 |-----------|------|
 | CLI entry | `src/subterminator/cli/main.py` |
-| Interactive prompts | `src/subterminator/cli/prompts.py` |
-| Accessibility settings | `src/subterminator/cli/accessibility.py` |
-| Engine | `src/subterminator/core/engine.py` |
-| State machine | `src/subterminator/core/states.py` |
-| Browser | `src/subterminator/core/browser.py` |
-| AI detection | `src/subterminator/core/ai.py` |
-| Protocols | `src/subterminator/core/protocols.py` |
-| Netflix service | `src/subterminator/services/netflix.py` |
-| Service registry | `src/subterminator/services/registry.py` |
-| Mock server | `src/subterminator/services/mock.py` |
-| Output formatting | `src/subterminator/cli/output.py` |
+| Legacy engine | `src/subterminator/core/engine.py` |
+| MCP task runner | `src/subterminator/mcp_orchestrator/task_runner.py` |
+| MCP LLM client | `src/subterminator/mcp_orchestrator/llm_client.py` |
+| MCP server client | `src/subterminator/mcp_orchestrator/mcp_client.py` |
+| Checkpoint handler | `src/subterminator/mcp_orchestrator/checkpoint.py` |
+| Snapshot parser | `src/subterminator/mcp_orchestrator/snapshot.py` |
+| MCP types | `src/subterminator/mcp_orchestrator/types.py` |
+| MCP services | `src/subterminator/mcp_orchestrator/services/` |
+| Legacy state machine | `src/subterminator/core/states.py` |
+| Legacy browser | `src/subterminator/core/browser.py` |
+| Legacy AI detection | `src/subterminator/core/ai.py` |
+| Legacy services | `src/subterminator/services/` |
 | Config | `src/subterminator/utils/config.py` |
-| Exceptions | `src/subterminator/utils/exceptions.py` |
-| Session logging | `src/subterminator/utils/session.py` |
 
 ### Key Commands
 
 ```bash
 # Run CLI
-uv run subterminator cancel                                      # Interactive mode
-uv run subterminator cancel --service netflix                    # Specify service directly
-uv run subterminator cancel --service netflix --dry-run
-uv run subterminator cancel --service netflix --target mock --verbose
+uv run subterminator cancel                                # Interactive
+uv run subterminator cancel --service netflix              # Legacy orchestrator
+uv run subterminator cancel --service netflix --orchestrate mcp  # MCP orchestrator
 
 # Tests
 uv run pytest tests/unit/ -v
-uv run pytest tests/integration/ -v
+uv run pytest tests/unit/mcp_orchestrator/ -v
 
 # Lint
 uv run ruff check src/
 uv run mypy src/
-```
-
-### State Flow Summary
-
-```
-START -> LOGIN_REQUIRED -> ACCOUNT_ACTIVE -> RETENTION_OFFER* -> EXIT_SURVEY -> FINAL_CONFIRMATION -> COMPLETE
-         (human auth)      (click cancel)    (decline offers)    (submit)       (human confirm)
-
-* RETENTION_OFFER can repeat multiple times
 ```
