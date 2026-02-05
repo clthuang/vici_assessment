@@ -9,7 +9,8 @@ from rich.console import Console
 from subterminator import __version__
 from subterminator.cli.output import OutputFormatter, PromptType
 from subterminator.cli.prompts import is_interactive, select_service
-from subterminator.core.ai import ClaudeInterpreter, HeuristicInterpreter
+from subterminator.core.agent import AIBrowserAgent
+from subterminator.core.ai import ClaudeActionPlanner, ClaudeInterpreter, HeuristicInterpreter
 from subterminator.core.browser import PlaywrightBrowser
 from subterminator.core.engine import CancellationEngine
 from subterminator.services import create_service, get_mock_pages_dir
@@ -24,6 +25,106 @@ from subterminator.utils.exceptions import ConfigurationError
 from subterminator.utils.session import SessionLogger
 
 console = Console()
+
+
+def _run_mcp_orchestration(
+    service: str,
+    model: str | None,
+    max_turns: int,
+    dry_run: bool,
+    verbose: bool,
+    no_checkpoint: bool,
+    profile_dir: str | None,
+    formatter: "OutputFormatter",
+) -> None:
+    """Run AI-driven MCP orchestration.
+
+    Exit codes for --auto mode:
+    - 0: Success (TaskResult.success=True)
+    - 1: Failure (TaskResult.success=False)
+    - 2: Configuration error (missing API key, bad model)
+    - 5: MCP connection error
+    - 130: SIGINT (user cancelled)
+    """
+    from dotenv import load_dotenv
+
+    load_dotenv()  # Load .env file before accessing env vars
+
+    from subterminator.mcp_orchestrator import (
+        LLMClient,
+        MCPClient,
+        TaskRunner,
+    )
+    from subterminator.mcp_orchestrator.exceptions import (
+        ConfigurationError as MCPConfigError,
+        MCPConnectionError,
+    )
+    # Import Netflix config to register it
+    from subterminator.mcp_orchestrator.services import netflix  # noqa: F401
+
+    console.print(f"[bold blue]MCP Orchestration Mode[/bold blue]")
+    console.print(f"Service: {service}")
+    console.print(f"Max turns: {max_turns}")
+    if verbose:
+        console.print(f"Model: {model or 'default'}")
+        console.print(f"Checkpoints: {'disabled' if no_checkpoint else 'enabled'}")
+
+    try:
+        # Create clients
+        mcp = MCPClient(profile_dir=profile_dir)
+        llm = LLMClient(model_name=model)
+
+        # Create runner
+        runner = TaskRunner(
+            mcp_client=mcp,
+            llm_client=llm,
+            disable_checkpoints=no_checkpoint,
+        )
+
+        # Run orchestration
+        console.print("\n[dim]Starting orchestration...[/dim]\n")
+
+        result = asyncio.run(runner.run(
+            service=service,
+            max_turns=max_turns,
+            dry_run=dry_run,
+        ))
+
+        # Display result
+        if result.success:
+            console.print(f"\n[green bold]Success![/green bold]")
+            console.print(f"Verified: {result.verified}")
+            console.print(f"Turns: {result.turns}")
+            if result.final_url:
+                console.print(f"Final URL: {result.final_url}")
+            raise typer.Exit(code=0)
+        else:
+            console.print(f"\n[red bold]Failed[/red bold]")
+            console.print(f"Reason: {result.reason}")
+            console.print(f"Turns: {result.turns}")
+            if result.error:
+                console.print(f"Error: {result.error}")
+            if result.final_url:
+                console.print(f"Final URL: {result.final_url}")
+
+            # Map reason to exit code
+            if result.reason == "human_rejected" and "SIGINT" in (result.error or ""):
+                raise typer.Exit(code=130)
+            elif result.reason == "mcp_error":
+                raise typer.Exit(code=5)
+            else:
+                raise typer.Exit(code=1)
+
+    except MCPConfigError as e:
+        console.print(f"[red]Configuration error: {e}[/red]")
+        raise typer.Exit(code=2)
+    except MCPConnectionError as e:
+        console.print(f"[red]MCP connection error: {e}[/red]")
+        raise typer.Exit(code=5)
+    except KeyboardInterrupt:
+        console.print("\n[yellow]Cancelled by user[/yellow]")
+        raise typer.Exit(code=130)
+
 
 app = typer.Typer(
     name="subterminator",
@@ -119,6 +220,32 @@ def cancel(
         "--use-chromium",
         help="Use Playwright's Chromium instead of system Chrome (for testing/CI)",
     ),
+    debug: bool = typer.Option(
+        False,
+        "--debug",
+        help="Enable AI debug logging (saves all requests/responses to session dir)",
+    ),
+    # MCP Orchestration options
+    auto: bool = typer.Option(
+        False,
+        "--auto",
+        help="Use AI-driven MCP orchestration (experimental)",
+    ),
+    model: str | None = typer.Option(
+        None,
+        "--model",
+        help="LLM model override for --auto mode (default: claude-sonnet-4-20250514)",
+    ),
+    max_turns: int = typer.Option(
+        20,
+        "--max-turns",
+        help="Maximum orchestration turns for --auto mode",
+    ),
+    no_checkpoint: bool = typer.Option(
+        False,
+        "--no-checkpoint",
+        help="Disable human checkpoints in --auto mode",
+    ),
 ) -> None:
     """Cancel a subscription service."""
     # Validate mutual exclusivity of browser options early (before browser init)
@@ -161,6 +288,20 @@ def cancel(
         "This tool automates browser interactions with subscription services.\n"
         "Use at your own risk. The service's Terms of Service may prohibit automation."
     )
+
+    # MCP Orchestration mode (--auto flag)
+    if auto:
+        _run_mcp_orchestration(
+            service=selected_service,
+            model=model,
+            max_turns=max_turns,
+            dry_run=dry_run,
+            verbose=verbose,
+            no_checkpoint=no_checkpoint,
+            profile_dir=profile_dir,
+            formatter=formatter,
+        )
+        return  # _run_mcp_orchestration handles exit
 
     try:
         # Load configuration
@@ -228,6 +369,27 @@ def cancel(
             prompt_type = prompt_type_map.get(checkpoint_type, PromptType.UNKNOWN)
             return formatter.show_human_prompt(prompt_type, timeout)
 
+        # Create AI agent if API key available
+        agent = None
+        if config.anthropic_api_key:
+            planner = ClaudeActionPlanner(
+                api_key=config.anthropic_api_key,
+                debug=debug,
+                session_dir=session.session_dir if debug else None,
+            )
+            agent = AIBrowserAgent(
+                browser=browser,
+                planner=planner,
+                heuristic=heuristic,
+                service=service_obj,
+                input_callback=input_callback,
+                output_callback=formatter.show_progress,
+                debug=debug,
+                session_dir=session.session_dir if debug else None,
+            )
+        elif verbose:
+            formatter.show_warning("No ANTHROPIC_API_KEY set - AI agent disabled")
+
         # Create engine
         engine = CancellationEngine(
             service=service_obj,
@@ -238,6 +400,7 @@ def cancel(
             config=config,
             output_callback=formatter.show_progress,
             input_callback=input_callback,
+            agent=agent,
         )
 
         # Show dry-run notice
