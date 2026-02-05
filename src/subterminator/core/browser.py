@@ -689,7 +689,7 @@ class PlaywrightBrowser:
                 return "{}"
             pruned = self._prune_a11y_tree(snapshot, max_depth=5)
             return json.dumps(pruned, indent=2)
-        except (AttributeError, NotImplementedError) as e:
+        except (AttributeError, NotImplementedError):
             # Accessibility API may not be available in all browser modes (e.g., CDP)
             return "{}"
 
@@ -865,7 +865,8 @@ class PlaywrightBrowser:
 
             // Try ARIA role/name
             if (!el && options.ariaRole) {
-                const elements = document.querySelectorAll(`[role="${options.ariaRole}"]`);
+                const roleSelector = '[role="' + options.ariaRole + '"]';
+                const elements = document.querySelectorAll(roleSelector);
                 for (const e of elements) {
                     if (!options.ariaName ||
                         e.getAttribute('aria-label')?.includes(options.ariaName) ||
@@ -927,7 +928,8 @@ class PlaywrightBrowser:
             "ariaName": aria_name,
         }
 
-        result = await self._page.evaluate(f"({js_find_element})({json.dumps(options)})")
+        js_call = f"({js_find_element})({json.dumps(options)})"
+        result = await self._page.evaluate(js_call)
 
         if result.get("found"):
             # Click at center of element

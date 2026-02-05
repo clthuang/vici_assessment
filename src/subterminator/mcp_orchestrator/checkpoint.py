@@ -9,7 +9,6 @@ from __future__ import annotations
 import base64
 import logging
 import tempfile
-from pathlib import Path
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -34,7 +33,7 @@ class CheckpointHandler:
                 # User rejected, abort operation
     """
 
-    def __init__(self, mcp: "MCPClient", disabled: bool = False) -> None:
+    def __init__(self, mcp: MCPClient, disabled: bool = False) -> None:
         """Initialize checkpoint handler.
 
         Args:
@@ -46,8 +45,8 @@ class CheckpointHandler:
 
     def detect_auth_edge_case(
         self,
-        snapshot: "NormalizedSnapshot",
-        config: "ServiceConfig",
+        snapshot: NormalizedSnapshot,
+        config: ServiceConfig,
     ) -> str | None:
         """Detect if current page is an auth edge case requiring user action.
 
@@ -76,7 +75,7 @@ class CheckpointHandler:
 
     async def wait_for_auth_completion(
         self,
-        snapshot: "NormalizedSnapshot",
+        snapshot: NormalizedSnapshot,
         auth_type: str,
     ) -> bool:
         """Wait for user to complete authentication manually.
@@ -89,10 +88,22 @@ class CheckpointHandler:
             True if user signals completion, False if cancelled.
         """
         messages = {
-            "login": "Login required. Please login in the browser, then press Enter to continue...",
-            "captcha": "CAPTCHA detected. Please solve it in the browser, then press Enter to continue...",
-            "mfa": "MFA required. Please complete verification in the browser, then press Enter to continue...",
-            "auth": "Authentication required. Please complete it in the browser, then press Enter to continue...",
+            "login": (
+                "Login required. Please login in the browser, "
+                "then press Enter to continue..."
+            ),
+            "captcha": (
+                "CAPTCHA detected. Please solve it in the browser, "
+                "then press Enter to continue..."
+            ),
+            "mfa": (
+                "MFA required. Please complete verification in the browser, "
+                "then press Enter to continue..."
+            ),
+            "auth": (
+                "Authentication required. Please complete it in the browser, "
+                "then press Enter to continue..."
+            ),
         }
         print(f"\n{'='*60}")
         print(f"  {messages.get(auth_type, messages['auth'])}")
@@ -108,9 +119,9 @@ class CheckpointHandler:
 
     def should_checkpoint(
         self,
-        tool: "ToolCall",
-        snapshot: "NormalizedSnapshot",
-        config: "ServiceConfig",
+        tool: ToolCall,
+        snapshot: NormalizedSnapshot,
+        config: ServiceConfig,
     ) -> bool:
         """Check if a checkpoint is needed before executing a tool.
 
@@ -132,7 +143,8 @@ class CheckpointHandler:
         for predicate in config.checkpoint_conditions:
             try:
                 if predicate(tool, snapshot):
-                    logger.info(f"Checkpoint triggered by condition: {predicate.__name__}")
+                    pred_name = predicate.__name__
+                    logger.info(f"Checkpoint triggered by condition: {pred_name}")
                     return True
             except Exception as e:
                 logger.warning(f"Checkpoint predicate error: {e}")
@@ -141,8 +153,8 @@ class CheckpointHandler:
 
     async def request_approval(
         self,
-        tool: "ToolCall",
-        snapshot: "NormalizedSnapshot",
+        tool: ToolCall,
+        snapshot: NormalizedSnapshot,
     ) -> bool:
         """Request human approval for an action.
 
@@ -210,8 +222,8 @@ class CheckpointHandler:
 
     def _display_checkpoint_info(
         self,
-        tool: "ToolCall",
-        snapshot: "NormalizedSnapshot",
+        tool: ToolCall,
+        snapshot: NormalizedSnapshot,
         screenshot_path: str | None,
     ) -> None:
         """Display checkpoint information to the user.
@@ -226,7 +238,7 @@ class CheckpointHandler:
         print("=" * 60)
         print(f"\n📍 Current URL: {snapshot.url}")
         print(f"📄 Page Title: {snapshot.title}")
-        print(f"\n🔧 Pending Action:")
+        print("\n🔧 Pending Action:")
         print(f"   Tool: {tool.name}")
         if tool.args:
             print(f"   Args: {tool.args}")

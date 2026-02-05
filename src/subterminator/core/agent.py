@@ -7,14 +7,15 @@ browser automation for subscription cancellation flows.
 from __future__ import annotations
 
 import time
+from collections.abc import Callable
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any, Callable
+from pathlib import Path
+from typing import TYPE_CHECKING
 
 from subterminator.core.protocols import (
     ActionPlan,
     ActionRecord,
     AgentContext,
-    CancellationResult,
     ErrorRecord,
     ExecutionResult,
     State,
@@ -26,7 +27,7 @@ from subterminator.utils.exceptions import HumanInterventionRequired
 if TYPE_CHECKING:
     from subterminator.core.ai import ClaudeActionPlanner, HeuristicInterpreter
     from subterminator.core.browser import PlaywrightBrowser
-    from subterminator.core.protocols import PlannedAction, ServiceProtocol
+    from subterminator.core.protocols import ServiceProtocol
 
 
 # State transitions: state -> (goal description, expected next state)
@@ -72,19 +73,23 @@ class AIBrowserAgent:
     """
 
     TERMINAL_STATES = frozenset([State.COMPLETE, State.FAILED, State.ABORTED])
-    HUMAN_CHECKPOINT_STATES = frozenset([State.LOGIN_REQUIRED, State.FINAL_CONFIRMATION])
+    HUMAN_CHECKPOINT_STATES = frozenset(
+        [State.LOGIN_REQUIRED, State.FINAL_CONFIRMATION]
+    )
 
     def __init__(
         self,
-        browser: "PlaywrightBrowser",
-        planner: "ClaudeActionPlanner | None" = None,
-        heuristic: "HeuristicInterpreter | None" = None,
-        service: "ServiceProtocol | None" = None,
+        browser: PlaywrightBrowser,
+        planner: ClaudeActionPlanner | None = None,
+        heuristic: HeuristicInterpreter | None = None,
+        service: ServiceProtocol | None = None,
         max_steps: int = 20,
         max_retries: int = 3,
-        heuristic_threshold: float = 0.8,
+        heuristic_threshold: float = 1.0,  # AI-first architecture
         input_callback: Callable[[str, int], str | None] | None = None,
         output_callback: Callable[[str, str], None] | None = None,
+        debug: bool = False,
+        session_dir: Path | None = None,
     ) -> None:
         """Initialize the AIBrowserAgent.
 
@@ -96,8 +101,11 @@ class AIBrowserAgent:
             max_steps: Maximum number of steps before failing.
             max_retries: Maximum retry attempts per action (default 3).
             heuristic_threshold: Confidence threshold for using heuristic result.
+                Default is 1.0 (effectively disabled) for AI-first architecture.
             input_callback: Callback for human input.
             output_callback: Callback for status output.
+            debug: If True, save debug artifacts to session_dir.
+            session_dir: Directory to save debug artifacts (required if debug=True).
 
         Raises:
             ValueError: If max_retries is less than 1.
@@ -114,6 +122,8 @@ class AIBrowserAgent:
         self.heuristic_threshold = heuristic_threshold
         self.input_callback = input_callback
         self.output_callback = output_callback or (lambda s, m: None)
+        self.debug = debug
+        self.session_dir = session_dir
 
         self.current_state = State.START
         self._step = 0
@@ -333,12 +343,14 @@ class AIBrowserAgent:
         script = """() => {
             const vw = window.innerWidth;
             const vh = window.innerHeight;
-            const selectors = 'button, a, input, select, [role="button"], [role="link"]';
-            const elements = document.querySelectorAll(selectors);
+            const s = 'button, a, input, select, [role="button"], [role="link"]';
+            const elements = document.querySelectorAll(s);
             const results = [];
             for (const el of elements) {
                 const rect = el.getBoundingClientRect();
-                if (rect.bottom > 0 && rect.top < vh && rect.right > 0 && rect.left < vw) {
+                const vis = rect.bottom > 0 && rect.top < vh;
+                const inV = rect.right > 0 && rect.left < vw;
+                if (vis && inV) {
                     let html = el.outerHTML;
                     if (html.length > 500) {
                         const tag = el.tagName.toLowerCase();
@@ -503,6 +515,7 @@ class AIBrowserAgent:
         """Execute an action plan, trying strategies in order.
 
         Attempts primary target first, then fallbacks until one succeeds.
+        Handles special action types: 'wait' and 'none' always succeed.
 
         Args:
             plan: The action plan to execute.
@@ -511,6 +524,24 @@ class AIBrowserAgent:
             ExecutionResult indicating success/failure and which strategy worked.
         """
         start = time.time()
+
+        # Handle special action types that don't require element targeting
+        if plan.action_type in ("wait", "none"):
+            elapsed = int((time.time() - start) * 1000)
+            self._record_action(
+                ActionRecord(
+                    action_type=plan.action_type,
+                    target_description="N/A",
+                    success=True,
+                    timestamp=time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+                )
+            )
+            return ExecutionResult(
+                success=True,
+                action_plan=plan,
+                strategy_used=plan.primary_target,
+                elapsed_ms=elapsed,
+            )
 
         for strategy in plan.all_targets():
             success = await self._try_target_strategy(
@@ -668,6 +699,124 @@ class AIBrowserAgent:
         goal = goal_info[0]
 
         return await self.planner.plan_action(context, goal, error_context)
+
+    async def run_agentic_loop(
+        self,
+        goal: str,
+        max_actions: int = 10,
+    ) -> AgentResult:
+        """Run an agentic loop that re-perceives after each action.
+
+        This method implements a continuous feedback loop where Claude
+        receives fresh context after each action and decides whether to
+        continue or stop. This enables handling multi-step flows like
+        Netflix's cancel page (expand → checkbox → click).
+
+        Args:
+            goal: What we're trying to achieve.
+            max_actions: Maximum actions before giving up (default 10).
+
+        Returns:
+            AgentResult with final state and message.
+        """
+        if not self.planner:
+            raise RuntimeError("No planner configured for agentic loop")
+
+        self.clear_history()
+
+        for action_num in range(max_actions):
+            # PERCEIVE: Get fresh context
+            context = await self.perceive()
+
+            # PLAN: Ask Claude what to do next
+            plan = await self.planner.plan_action(
+                context=context,
+                goal=goal,
+            )
+
+            # Check if Claude says we're done (continue_after=False or none)
+            if not plan.continue_after or plan.action_type == "none":
+                return AgentResult(
+                    state=plan.detected_state or State.UNKNOWN,
+                    message=plan.reasoning,
+                    steps=action_num,
+                )
+
+            # Check for human checkpoint states
+            if plan.detected_state in self.HUMAN_CHECKPOINT_STATES:
+                checkpoint_handled = await self._check_human_checkpoint_for_state(
+                    plan.detected_state
+                )
+                if checkpoint_handled:
+                    # Re-perceive after human intervention
+                    continue
+
+            # EXECUTE: Perform the action
+            await self.execute(plan)
+
+            # Brief wait for page to settle
+            try:
+                await self.browser.wait_for_navigation(timeout=2000)
+            except Exception:
+                # Navigation timeout is OK - page might not navigate
+                pass
+
+        # Max actions reached
+        return AgentResult(
+            state=State.FAILED,
+            message="Max actions exceeded",
+            steps=max_actions,
+        )
+
+    async def _check_human_checkpoint_for_state(self, state: State) -> bool:
+        """Check and handle human checkpoint for a specific state.
+
+        Args:
+            state: The state to check for human checkpoint.
+
+        Returns:
+            True if checkpoint was handled, False otherwise.
+        """
+        if state not in self.HUMAN_CHECKPOINT_STATES:
+            return False
+
+        # Handle LOGIN_REQUIRED
+        if state == State.LOGIN_REQUIRED:
+            if self.input_callback is None:
+                raise HumanInterventionRequired("Login required")
+
+            self.output_callback(
+                "AUTH",
+                "Please log in, then press Enter to continue..."
+            )
+            self.input_callback("AUTH", 0)
+            return True
+
+        # Handle FINAL_CONFIRMATION
+        if state == State.FINAL_CONFIRMATION:
+            if self._dry_run:
+                self.output_callback(
+                    "DRY_RUN",
+                    "Would confirm cancellation here (dry run)"
+                )
+                return True
+
+            if self.input_callback is None:
+                raise HumanInterventionRequired("Final confirmation required")
+
+            self.output_callback(
+                "CONFIRM",
+                "Type 'confirm' to proceed with cancellation..."
+            )
+            response = self.input_callback("CONFIRM", 0)
+            if response != "confirm":
+                # User aborted
+                return True
+
+            # Continue to execute confirmation
+            return False
+
+        return False
 
     async def handle_state(self, state: State) -> State:
         """Handle a single state using the perceive-plan-execute-validate loop.

@@ -285,22 +285,26 @@ class ActionPlan:
     """Plan for executing a browser action with fallback strategies.
 
     Attributes:
-        action_type: The type of action to perform.
+        action_type: The type of action to perform (click, fill, select, wait, none).
         primary_target: The primary targeting strategy.
         fallback_targets: Alternative strategies if primary fails (max 3).
         value: Value for fill/select actions.
         reasoning: Explanation of why this action was planned.
         confidence: Confidence score between 0.0 and 1.0.
         expected_state: The expected state after action completes.
+        continue_after: Whether to continue the agentic loop after this action.
+        detected_state: Claude's assessment of the current page state.
     """
 
-    action_type: Literal["click", "fill", "select"]
+    action_type: Literal["click", "fill", "select", "wait", "none"]
     primary_target: TargetStrategy
     fallback_targets: list[TargetStrategy] = field(default_factory=list)
     value: str | None = None
     reasoning: str = ""
     confidence: float = 0.0
     expected_state: "State | None" = None
+    continue_after: bool = True
+    detected_state: "State | None" = None
 
     def __post_init__(self) -> None:
         """Validate action plan constraints."""
@@ -356,9 +360,12 @@ class AgentContext:
         Returns:
             Formatted string with all context information.
         """
+        def format_action(a: ActionRecord) -> str:
+            status = "success" if a.success else "failed"
+            return f"- {a.action_type} on {a.target_description}: {status}"
+
         actions_summary = "\n".join(
-            f"- {a.action_type} on {a.target_description}: {'success' if a.success else 'failed'}"
-            for a in self.previous_actions
+            format_action(a) for a in self.previous_actions
         ) or "None"
 
         errors_summary = "\n".join(
@@ -366,10 +373,18 @@ class AgentContext:
             for e in self.error_history
         ) or "None"
 
+        # Truncate visible_text to avoid token bloat (max 2000 chars)
+        visible_text_truncated = (
+            self.visible_text[:2000] + "..."
+            if len(self.visible_text) > 2000
+            else self.visible_text
+        )
+
         return (
             f"URL: {self.url}\n"
             f"Viewport: {self.viewport_size[0]}x{self.viewport_size[1]}\n"
             f"Scroll: ({self.scroll_position[0]}, {self.scroll_position[1]})\n"
+            f"VISIBLE TEXT:\n{visible_text_truncated}\n"
             f"ACCESSIBILITY TREE:\n{self.accessibility_tree}\n"
             f"HTML SNIPPET:\n{self.html_snippet}\n"
             f"PREVIOUS ACTIONS:\n{actions_summary}\n"

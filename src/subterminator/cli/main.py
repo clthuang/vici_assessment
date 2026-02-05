@@ -10,7 +10,11 @@ from subterminator import __version__
 from subterminator.cli.output import OutputFormatter, PromptType
 from subterminator.cli.prompts import is_interactive, select_service
 from subterminator.core.agent import AIBrowserAgent
-from subterminator.core.ai import ClaudeActionPlanner, ClaudeInterpreter, HeuristicInterpreter
+from subterminator.core.ai import (
+    ClaudeActionPlanner,
+    ClaudeInterpreter,
+    HeuristicInterpreter,
+)
 from subterminator.core.browser import PlaywrightBrowser
 from subterminator.core.engine import CancellationEngine
 from subterminator.services import create_service, get_mock_pages_dir
@@ -50,19 +54,14 @@ def _run_mcp_orchestration(
 
     load_dotenv()  # Load .env file before accessing env vars
 
-    from subterminator.mcp_orchestrator import (
-        LLMClient,
-        MCPClient,
-        TaskRunner,
-    )
+    from subterminator.mcp_orchestrator import LLMClient, MCPClient, TaskRunner
     from subterminator.mcp_orchestrator.exceptions import (
         ConfigurationError as MCPConfigError,
-        MCPConnectionError,
     )
-    # Import Netflix config to register it
+    from subterminator.mcp_orchestrator.exceptions import MCPConnectionError
     from subterminator.mcp_orchestrator.services import netflix  # noqa: F401
 
-    console.print(f"[bold blue]MCP Orchestration Mode[/bold blue]")
+    console.print("[bold blue]MCP Orchestration Mode[/bold blue]")
     console.print(f"Service: {service}")
     console.print(f"Max turns: {max_turns}")
     if verbose:
@@ -92,14 +91,14 @@ def _run_mcp_orchestration(
 
         # Display result
         if result.success:
-            console.print(f"\n[green bold]Success![/green bold]")
+            console.print("\n[green bold]Success![/green bold]")
             console.print(f"Verified: {result.verified}")
             console.print(f"Turns: {result.turns}")
             if result.final_url:
                 console.print(f"Final URL: {result.final_url}")
             raise typer.Exit(code=0)
         else:
-            console.print(f"\n[red bold]Failed[/red bold]")
+            console.print("\n[red bold]Failed[/red bold]")
             console.print(f"Reason: {result.reason}")
             console.print(f"Turns: {result.turns}")
             if result.error:

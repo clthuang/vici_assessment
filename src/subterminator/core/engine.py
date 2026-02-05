@@ -21,16 +21,6 @@ from subterminator.core.protocols import (
     ServiceProtocol,
     State,
 )
-
-if TYPE_CHECKING:
-    from subterminator.core.agent import AIBrowserAgent
-
-logger = logging.getLogger(__name__)
-
-# Note: CancellationStateMachine exists in states.py for documentation and potential
-# future use for strict transition validation. Currently, the engine manages states
-# directly for simplicity. The state machine can be integrated if stricter validation
-# is needed (see states.py for valid transitions).
 from subterminator.services.selectors import SelectorConfig
 from subterminator.utils.config import AppConfig
 from subterminator.utils.exceptions import (
@@ -41,6 +31,16 @@ from subterminator.utils.exceptions import (
     UserAborted,
 )
 from subterminator.utils.session import SessionLogger
+
+if TYPE_CHECKING:
+    from subterminator.core.agent import AIBrowserAgent
+
+# Note: CancellationStateMachine exists in states.py for documentation and potential
+# future use for strict transition validation. Currently, the engine manages states
+# directly for simplicity. The state machine can be integrated if stricter validation
+# is needed (see states.py for valid transitions).
+
+logger = logging.getLogger(__name__)
 
 T = TypeVar("T")
 
@@ -88,7 +88,7 @@ class CancellationEngine:
         output_callback: Callable[[str, str], None] | None = None,
         input_callback: Callable[[str, int], str | None] | None = None,
         use_agent: bool = False,
-        agent: "AIBrowserAgent | None" = None,
+        agent: AIBrowserAgent | None = None,
     ):
         """Initialize the CancellationEngine.
 
@@ -241,9 +241,9 @@ class CancellationEngine:
     async def _handle_state(self, state: State) -> State:
         """Process current state and determine next state.
 
-        If an agent is configured, delegates to agent.handle_state() for most
-        states, keeping hardcoded handling for START and LOGIN_REQUIRED.
-        Falls back to hardcoded handling if agent raises API errors.
+        AI-first architecture: Only START uses hardcoded handling (navigation).
+        All other states use AI agent to analyze screenshots and decide actions.
+        No fallback to hardcoded selectors - AI handles everything.
 
         Args:
             state: The current state to handle.
@@ -253,23 +253,35 @@ class CancellationEngine:
         """
         self.output_callback(state.name, f"Handling state: {state.name}")
 
-        # START and LOGIN_REQUIRED always use hardcoded handling
-        if state in (State.START, State.LOGIN_REQUIRED):
+        # Only START needs hardcoded (navigation to entry URL)
+        if state == State.START:
             return await self._hardcoded_handle_state(state)
 
-        # Try agent-driven handling if agent is configured
-        if self.agent:
-            try:
-                return await self._ai_driven_handle(state)
-            except (anthropic.APIStatusError, anthropic.APIConnectionError) as e:
-                logger.warning(f"AI agent failed, falling back to hardcoded: {e}")
-                # Fall through to hardcoded handling
+        # LOGIN_REQUIRED - still need human checkpoint but then use AI
+        if state == State.LOGIN_REQUIRED:
+            await self._human_checkpoint("AUTH", self.config.auth_timeout)
+            await self.browser.navigate(
+                self.service.entry_url, self.config.page_timeout
+            )
+            return await self._detect_state()
 
-        # Hardcoded handling (fallback or no agent)
-        return await self._hardcoded_handle_state(state)
+        # ALL other states use AI agent - no fallback to hardcoded
+        if self.agent:
+            return await self._ai_driven_handle(state)
+
+        # No agent configured - fail gracefully
+        self.output_callback(
+            state.name,
+            "No AI agent configured - cannot proceed with AI-first architecture"
+        )
+        return State.FAILED
 
     async def _ai_driven_handle(self, state: State) -> State:
-        """Handle state using AI agent.
+        """Handle state using AI agent with agentic loop.
+
+        Uses the new run_agentic_loop method for intelligent, adaptive handling
+        that doesn't rely on hardcoded selectors. AI-first architecture: no
+        fallback to hardcoded handlers on failure.
 
         Args:
             state: The current state to handle.
@@ -286,7 +298,59 @@ class CancellationEngine:
             self.agent.clear_history()
             self._action_history_cleared = True
 
-        return await self.agent.handle_state(state)
+        # Use agentic loop with flexible goal based on current state
+        goal = self._get_agentic_goal(state)
+
+        try:
+            result = await self.agent.run_agentic_loop(goal=goal, max_actions=10)
+            return result.state
+        except (anthropic.APIStatusError, anthropic.APIConnectionError) as e:
+            # AI-first: no fallback to hardcoded, just fail gracefully
+            logger.warning(f"AI agent API error: {e}")
+            self.output_callback(
+                state.name,
+                f"AI agent API error - no fallback in AI-first mode: {e}"
+            )
+            return State.FAILED
+
+    def _get_agentic_goal(self, state: State) -> str:
+        """Get a flexible, goal-oriented prompt for the agentic loop.
+
+        Args:
+            state: The current state.
+
+        Returns:
+            A goal string that encourages intelligent visual analysis.
+        """
+        goals = {
+            State.ACCOUNT_ACTIVE: (
+                "Cancel this subscription. Look for 'Cancel', 'Cancel plan', "
+                "'Cancel membership' buttons or links. Click whatever leads "
+                "to cancellation."
+            ),
+            State.RETENTION_OFFER: (
+                "Continue with cancellation. The page may show offers or "
+                "alternatives. Look for buttons to proceed with canceling - "
+                "they might say 'Cancel plan', 'Continue to cancel', "
+                "'Cancel anyway', or similar. If you see an expandable "
+                "section (+ icon), expand it first. If there's a checkbox "
+                "to confirm cancellation, check it. "
+                "Then click the cancel/confirm button."
+            ),
+            State.EXIT_SURVEY: (
+                "Complete or skip the exit survey to proceed with cancellation. "
+                "Look for 'Continue', 'Submit', 'Skip', or 'Cancel' buttons."
+            ),
+            State.FINAL_CONFIRMATION: (
+                "Confirm the cancellation. Look for 'Finish Cancellation', "
+                "'Confirm', or 'Cancel plan' button to complete the process."
+            ),
+            State.UNKNOWN: (
+                "Analyze the page and find the next step to cancel this subscription. "
+                "Look for any cancel-related buttons, links, or actions."
+            ),
+        }
+        return goals.get(state, "Continue with the subscription cancellation process.")
 
     async def _hardcoded_handle_state(self, state: State) -> State:
         """Process state using hardcoded logic.
@@ -388,10 +452,11 @@ class CancellationEngine:
             return State.FAILED
 
     async def _detect_state(self) -> State:
-        """Detect current page state using heuristic then AI.
+        """Detect current page state using AI-first approach.
 
-        First tries heuristic detection for speed. If confidence is low,
-        falls back to AI-based detection.
+        AI-first architecture: Only trust heuristics for terminal/entry states
+        (LOGIN_REQUIRED, COMPLETE, FAILED, ACCOUNT_CANCELLED, THIRD_PARTY_BILLING).
+        For flow states, return UNKNOWN to trigger AI-driven handling.
 
         Returns:
             The detected State.
@@ -402,38 +467,32 @@ class CancellationEngine:
         screenshot_path = self.session.screenshots_dir / screenshot_name
         await self.browser.screenshot(str(screenshot_path))
 
-        # Try heuristic first
-        result = self.heuristic.interpret(url, text)
+        # Only use heuristic for terminal/entry states with high confidence
+        if self.heuristic:
+            result = self.heuristic.interpret(url, text)
 
-        self.session.log_transition(
-            from_state=self._current_state.name,
-            to_state=result.state.name,
-            trigger="detect",
-            url=url,
-            screenshot=str(screenshot_path),
-            detection_method="heuristic",
-            confidence=result.confidence,
-        )
-
-        if result.confidence >= 0.7:
-            return result.state
-
-        # Fall back to AI
-        if self.ai:
-            screenshot = await self.browser.screenshot()
-            ai_result = await self.ai.interpret(screenshot)
-
-            self.session.log_ai_call(
+            self.session.log_transition(
+                from_state=self._current_state.name,
+                to_state=result.state.name,
+                trigger="detect",
+                url=url,
                 screenshot=str(screenshot_path),
-                prompt_tokens=0,  # Not tracked
-                response_tokens=0,
-                state=ai_result.state.name,
-                confidence=ai_result.confidence,
+                detection_method="heuristic",
+                confidence=result.confidence,
             )
 
-            if ai_result.confidence >= 0.5:
-                return ai_result.state
+            # Only trust very high confidence for terminal/entry states
+            terminal_entry_states = (
+                State.LOGIN_REQUIRED,
+                State.COMPLETE,
+                State.FAILED,
+                State.ACCOUNT_CANCELLED,
+                State.THIRD_PARTY_BILLING,
+            )
+            if result.confidence >= 0.9 and result.state in terminal_entry_states:
+                return result.state
 
+        # For all flow states, return UNKNOWN to trigger AI-driven handling
         return State.UNKNOWN
 
     async def _human_checkpoint(self, checkpoint_type: str, timeout: int) -> None:

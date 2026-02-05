@@ -10,6 +10,8 @@ from __future__ import annotations
 
 import base64
 import json
+from datetime import datetime
+from pathlib import Path
 from typing import TYPE_CHECKING
 
 import anthropic
@@ -383,6 +385,13 @@ class ClaudeActionPlanner:
         "Use the browser_action tool to specify what action to take next."
     )
 
+    # State enum values for tool schema
+    STATE_ENUM = [
+        "LOGIN_REQUIRED", "ACCOUNT_ACTIVE", "ACCOUNT_CANCELLED",
+        "THIRD_PARTY_BILLING", "RETENTION_OFFER", "EXIT_SURVEY",
+        "FINAL_CONFIRMATION", "COMPLETE", "FAILED", "UNKNOWN"
+    ]
+
     # Updated TOOL_SCHEMA with targets array format per design.md Section 4.4
     TOOL_SCHEMA = {
         "name": "browser_action",
@@ -410,7 +419,11 @@ class ClaudeActionPlanner:
                 },
                 "action_type": {
                     "type": "string",
-                    "enum": ["click", "fill", "select", "scroll", "wait", "navigate"]
+                    "description": (
+                        "The action to take. Use 'click' for most "
+                        "interactions. Use 'none' when goal is complete."
+                    ),
+                    "enum": ["click", "fill", "select", "wait", "none"]
                 },
                 "targets": {
                     "type": "array",
@@ -442,7 +455,23 @@ class ClaudeActionPlanner:
                 },
                 "value": {"type": "string"},
                 "reasoning": {"type": "string"},
-                "confidence": {"type": "number", "minimum": 0, "maximum": 1}
+                "confidence": {"type": "number", "minimum": 0, "maximum": 1},
+                "continue_after": {
+                    "type": "boolean",
+                    "description": (
+                        "True if more actions needed to complete goal, "
+                        "False if goal is complete or no more actions possible"
+                    )
+                },
+                "detected_state": {
+                    "type": "string",
+                    "description": "Current page state based on visual analysis",
+                    "enum": [
+                        "LOGIN_REQUIRED", "ACCOUNT_ACTIVE", "ACCOUNT_CANCELLED",
+                        "THIRD_PARTY_BILLING", "RETENTION_OFFER", "EXIT_SURVEY",
+                        "FINAL_CONFIRMATION", "COMPLETE", "FAILED", "UNKNOWN"
+                    ]
+                }
             },
             "required": ["state", "action_type", "targets", "reasoning", "confidence"]
         }
@@ -451,24 +480,48 @@ class ClaudeActionPlanner:
     # Legacy TOOLS list for backward compatibility
     TOOLS = [TOOL_SCHEMA]
 
-    # Enhanced system prompt for agent mode
-    AGENT_SYSTEM_PROMPT = (
-        "You are an AI agent controlling a browser to cancel a subscription.\n\n"
-        "Your task: Analyze the page and decide what action to take next.\n\n"
-        "ELEMENT IDENTIFICATION PRIORITY:\n"
-        "1. CSS selector - Use when element has unique id or class\n"
-        "2. ARIA role + name - Use for buttons, links with clear labels\n"
-        "3. Text content - Use when text is visible and unique\n"
-        "4. Coordinates - ONLY as last resort when semantic methods fail\n\n"
-        "RULES:\n"
-        "- Always provide at least 2 targeting methods when possible\n"
-        "- Confidence should reflect how certain you are about the target\n"
-        "- If page state is unclear, set state to UNKNOWN\n"
-        "- For fill/select actions, you MUST provide a value\n\n"
-        "IMPORTANT: After clicking, the page will change. Your "
-        "expected_next_state in the response should predict what state "
-        "the page will be in AFTER the action completes."
-    )
+    # Enhanced system prompt for agent mode - goal-oriented visual analysis
+    AGENT_SYSTEM_PROMPT = """You are an AI agent controlling a browser to cancel a subscription.
+
+GOAL: Help the user cancel their subscription by analyzing what's on screen and clicking the right elements.
+
+HOW TO ANALYZE THE PAGE:
+1. Look at the SCREENSHOT carefully - what do you actually SEE?
+2. Identify clickable elements: buttons, links, checkboxes, expandable sections (+ icons, arrows, accordions)
+3. Look for text containing "Cancel", "Cancel plan", "Cancel membership", "Yes, cancel", etc.
+4. Look for expandable/collapsible sections - these often have a + icon or arrow that reveals more options when clicked
+5. Look for checkboxes that might need to be ticked before a button becomes enabled
+
+COMMON PATTERNS TO LOOK FOR:
+- A section with "Cancel your plan" or similar text with a + or expand icon next to it - CLICK THE + TO EXPAND
+- After expanding, look for a checkbox like "Yes, I want to cancel" - CLICK THE CHECKBOX
+- After checking the box, look for a "Cancel" or "Cancel plan" button that's now enabled - CLICK IT
+- Grayed out or disabled buttons mean you need to do something else first (expand a section, check a checkbox)
+
+ACTIONS:
+- Use "click" for almost everything (buttons, links, checkboxes, expanders, accordions)
+- Use "fill" only if you need to type text into an input field
+- Use "none" only when the goal is already complete (you see confirmation message)
+- DO NOT use "wait" - just click what needs to be clicked
+
+TARGETING (in order of preference):
+1. Text content - Click by visible text (e.g., "Cancel plan", "Yes, cancel my plan")
+2. ARIA role + name - For buttons/checkboxes with accessible names
+3. CSS selector - When element has unique id or class
+4. Coordinates - Last resort only
+
+SET continue_after:
+- TRUE if more steps are needed (you just expanded something or checked a box)
+- FALSE if this is the final cancel button OR goal is already complete
+
+CRITICAL - WHEN TO SET continue_after=false:
+- ONLY when you see an explicit confirmation message like "Your cancellation is complete" or "Membership cancelled"
+- NOT after clicking a checkbox - there's usually a "Finish Cancellation" or "Confirm" button still needed
+- NOT after expanding a section - you still need to complete the actions inside
+
+If you clicked a checkbox and don't see a completion message, you MUST set continue_after=true and look for the final confirmation button.
+
+BE ADAPTIVE: Don't assume specific elements exist. Look at what's actually on screen and click whatever leads toward cancellation."""
 
     SELF_CORRECT_PROMPT = (
         "Your previous action FAILED. You must try a DIFFERENT approach.\n\n"
@@ -488,14 +541,24 @@ class ClaudeActionPlanner:
         "an alternative."
     )
 
-    def __init__(self, api_key: str | None = None) -> None:
+    def __init__(
+        self,
+        api_key: str | None = None,
+        debug: bool = False,
+        session_dir: Path | None = None,
+    ) -> None:
         """Initialize the ClaudeActionPlanner.
 
         Args:
             api_key: Optional Anthropic API key. If not provided, will use
                 the ANTHROPIC_API_KEY environment variable.
+            debug: If True, save debug artifacts to session_dir.
+            session_dir: Directory to save debug artifacts (required if debug=True).
         """
         self.client = anthropic.Anthropic(api_key=api_key)
+        self.debug = debug
+        self.session_dir = session_dir
+        self._debug_turn = 0
 
     def _compress_screenshot(
         self, screenshot: bytes, max_size_bytes: int = 4_500_000
@@ -619,10 +682,17 @@ class ClaudeActionPlanner:
         # Detect media type (JPEG if compressed, PNG otherwise)
         media_type = "image/jpeg" if screenshot[:2] == b'\xff\xd8' else "image/png"
 
-        # Build the prompt text
-        prompt_text = f"""Goal: {goal}
+        # Build the prompt text with clear visual analysis guidance
+        prompt_text = f"""GOAL: {goal}
 
-{context.to_prompt_context()}"""
+INSTRUCTIONS: Look at the screenshot and tell me what to click next to progress toward the goal.
+Analyze what you SEE - look for buttons, links, checkboxes, expandable sections (+ icons, arrows).
+If something needs to be expanded or checked first before the main action, do that first.
+
+PAGE CONTEXT:
+{context.to_prompt_context()}
+
+What is the single best next action to take?"""
 
         if error_context:
             prompt_text = f"{error_context}\n\n{prompt_text}"
@@ -655,10 +725,16 @@ class ClaudeActionPlanner:
             # Find tool_use block in response
             for block in response.content:
                 if block.type == "tool_use" and block.name == "browser_action":
-                    return self._parse_action_plan(block.input)
+                    action_plan = self._parse_action_plan(block.input)
+                    # Save debug artifacts if debug mode is enabled
+                    if self.debug and self.session_dir:
+                        self._save_debug_artifacts(
+                            context, prompt_text, response, action_plan
+                        )
+                    return action_plan
 
             # No tool_use found, return default ActionPlan
-            return ActionPlan(
+            default_plan = ActionPlan(
                 action_type="wait",
                 primary_target=TargetStrategy(method="css", css_selector="body"),
                 fallback_targets=[],
@@ -667,9 +743,124 @@ class ClaudeActionPlanner:
                 confidence=0.0,
                 expected_state=State.UNKNOWN,
             )
+            # Save debug artifacts even for default plan
+            if self.debug and self.session_dir:
+                self._save_debug_artifacts(
+                    context, prompt_text, response, default_plan
+                )
+            return default_plan
 
         except anthropic.APIError as e:
             raise StateDetectionError(f"Claude API error: {e}") from e
+
+    def _save_debug_artifacts(
+        self,
+        context: AgentContext,
+        prompt_text: str,
+        response: anthropic.Message,
+        action_plan: ActionPlan,
+    ) -> None:
+        """Save debug artifacts for this AI turn.
+
+        Creates a debug/ subdirectory in the session dir and saves:
+        - turn_XXX_request.json: What was sent to Claude
+        - turn_XXX_screenshot.png: Screenshot sent to Claude
+        - turn_XXX_response.json: Raw Claude response
+        - turn_XXX_action.json: Parsed ActionPlan
+
+        Args:
+            context: The AgentContext sent to Claude.
+            prompt_text: The prompt text sent to Claude.
+            response: Raw response from Claude API.
+            action_plan: Parsed ActionPlan from the response.
+        """
+        if not self.session_dir:
+            return
+
+        self._debug_turn += 1
+        debug_dir = self.session_dir / "debug"
+        debug_dir.mkdir(exist_ok=True)
+
+        turn_prefix = f"turn_{self._debug_turn:03d}"
+
+        # Save request (what we sent to Claude)
+        request_data = {
+            "turn": self._debug_turn,
+            "timestamp": datetime.now().isoformat(),
+            "system_prompt": self.AGENT_SYSTEM_PROMPT,
+            "prompt_text": prompt_text,
+            "context": {
+                "url": context.url,
+                "viewport_size": context.viewport_size,
+                "scroll_position": context.scroll_position,
+                "visible_text": context.visible_text[:2000] if context.visible_text else "",
+                "accessibility_tree": context.accessibility_tree[:5000] if context.accessibility_tree else "",
+                "html_snippet": context.html_snippet[:5000] if context.html_snippet else "",
+                "previous_actions": [a.to_dict() for a in context.previous_actions],
+                "error_history": [e.to_dict() for e in context.error_history],
+            },
+        }
+        (debug_dir / f"{turn_prefix}_request.json").write_text(
+            json.dumps(request_data, indent=2, ensure_ascii=False)
+        )
+
+        # Save screenshot
+        (debug_dir / f"{turn_prefix}_screenshot.png").write_bytes(context.screenshot)
+
+        # Save raw response
+        response_data = {
+            "turn": self._debug_turn,
+            "model": response.model,
+            "stop_reason": response.stop_reason,
+            "usage": {
+                "input_tokens": response.usage.input_tokens,
+                "output_tokens": response.usage.output_tokens,
+            },
+            "content": [
+                {
+                    "type": block.type,
+                    "data": block.model_dump() if hasattr(block, "model_dump") else str(block),
+                }
+                for block in response.content
+            ],
+        }
+        (debug_dir / f"{turn_prefix}_response.json").write_text(
+            json.dumps(response_data, indent=2, ensure_ascii=False)
+        )
+
+        # Save parsed action plan
+        action_data = {
+            "turn": self._debug_turn,
+            "action_type": action_plan.action_type,
+            "primary_target": {
+                "method": action_plan.primary_target.method,
+                "css_selector": action_plan.primary_target.css_selector,
+                "aria_role": action_plan.primary_target.aria_role,
+                "aria_name": action_plan.primary_target.aria_name,
+                "text_content": action_plan.primary_target.text_content,
+                "coordinates": action_plan.primary_target.coordinates,
+            },
+            "fallback_targets": [
+                {
+                    "method": t.method,
+                    "css_selector": t.css_selector,
+                    "aria_role": t.aria_role,
+                    "aria_name": t.aria_name,
+                    "text_content": t.text_content,
+                    "coordinates": t.coordinates,
+                }
+                for t in action_plan.fallback_targets
+            ],
+            "value": action_plan.value,
+            "reasoning": action_plan.reasoning,
+            "confidence": action_plan.confidence,
+            "continue_after": action_plan.continue_after,
+            "detected_state": str(action_plan.detected_state) if action_plan.detected_state else None,
+            "expected_state": str(action_plan.expected_state) if action_plan.expected_state else None,
+        }
+        (debug_dir / f"{turn_prefix}_action.json").write_text(
+            json.dumps(action_data, indent=2, ensure_ascii=False)
+        )
 
     def _parse_action_plan(self, tool_input: dict) -> ActionPlan:
         """Parse tool_use response into ActionPlan with targets array.
@@ -694,6 +885,15 @@ class ClaudeActionPlanner:
             except KeyError:
                 pass
 
+        # Parse detected_state (current page state assessment)
+        detected_state = None
+        detected_state_str = tool_input.get("detected_state") or tool_input.get("state", "")
+        if detected_state_str:
+            try:
+                detected_state = State[detected_state_str.upper()]
+            except KeyError:
+                pass
+
         # Parse action type
         action_type = tool_input.get("action_type", "wait").lower()
 
@@ -702,6 +902,11 @@ class ClaudeActionPlanner:
         if not isinstance(confidence, (int, float)):
             confidence = 0.5
         confidence = max(0.0, min(1.0, confidence))
+
+        # Parse continue_after (defaults to True for backward compatibility)
+        continue_after = tool_input.get("continue_after", True)
+        if not isinstance(continue_after, bool):
+            continue_after = True
 
         # Parse targets array
         targets_data = tool_input.get("targets", [])
@@ -722,6 +927,8 @@ class ClaudeActionPlanner:
             reasoning=tool_input.get("reasoning", ""),
             confidence=confidence,
             expected_state=expected_state,
+            continue_after=continue_after,
+            detected_state=detected_state,
         )
 
     async def plan(
