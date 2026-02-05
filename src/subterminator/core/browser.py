@@ -5,10 +5,13 @@ anti-detection features via playwright-stealth. It implements the BrowserProtoco
 for use in subscription cancellation flows.
 """
 
+from __future__ import annotations
+
+import json
 import subprocess
 import time
 from pathlib import Path
-from typing import Any, cast
+from typing import TYPE_CHECKING, Any, cast
 
 from playwright.async_api import (
     Browser,
@@ -16,6 +19,9 @@ from playwright.async_api import (
     Page,
     Playwright,
     async_playwright,
+)
+from playwright.async_api import (
+    TimeoutError as PlaywrightTimeoutError,
 )
 from playwright_stealth import Stealth
 
@@ -26,6 +32,9 @@ from subterminator.utils.exceptions import (
     ProfileLoadError,
 )
 
+if TYPE_CHECKING:
+    from subterminator.core.protocols import BrowserAction, BrowserElement
+
 
 def launch_system_chrome(port: int = 9222) -> str:
     """Launch system Chrome with remote debugging enabled.
@@ -33,6 +42,9 @@ def launch_system_chrome(port: int = 9222) -> str:
     Uses a project-local profile directory (.chrome-profile/) to ensure
     Chrome launches as a new instance even if Chrome is already running.
     The profile persists between runs to preserve login state.
+
+    If Chrome is already running on the specified port, returns the CDP URL
+    without launching a new instance.
 
     Args:
         port: The port for Chrome DevTools Protocol. Defaults to 9222.
@@ -44,6 +56,15 @@ def launch_system_chrome(port: int = 9222) -> str:
         RuntimeError: If Chrome installation cannot be found or fails to start.
     """
     import urllib.request
+
+    cdp_url = f"http://localhost:{port}"
+
+    # Check if Chrome is already running on this port
+    try:
+        urllib.request.urlopen(f"{cdp_url}/json/version", timeout=1)
+        return cdp_url  # Already running, no need to launch
+    except Exception:
+        pass  # Not running, continue to launch
 
     chrome_paths = [
         "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",  # macOS
@@ -451,3 +472,474 @@ class PlaywrightBrowser:
         self._context = None
         self._page = None
         self._playwright = None
+
+    async def accessibility_snapshot(self) -> dict[str, Any]:
+        """Get accessibility tree snapshot of the current page.
+
+        Returns:
+            Dictionary representing the accessibility tree with roles and names.
+
+        Raises:
+            RuntimeError: If browser not launched.
+        """
+        if not self._page:
+            raise RuntimeError("Browser not launched")
+        snapshot = await self._page.accessibility.snapshot()  # type: ignore[attr-defined]
+        return snapshot or {"role": "WebArea", "name": "", "children": []}
+
+    async def get_element(self, selector: str) -> BrowserElement | None:
+        """Get element information by selector.
+
+        Args:
+            selector: CSS selector for the element.
+
+        Returns:
+            BrowserElement with role, name, and selector, or None if not found.
+
+        Raises:
+            RuntimeError: If browser not launched.
+        """
+        from subterminator.core.protocols import BrowserElement
+
+        if not self._page:
+            raise RuntimeError("Browser not launched")
+
+        element = await self._page.query_selector(selector)
+        if not element:
+            return None
+
+        role = await element.get_attribute("role") or "generic"
+        aria_label = await element.get_attribute("aria-label")
+        name = aria_label if aria_label else await element.inner_text()
+
+        return BrowserElement(role=role, name=name, selector=selector)
+
+    async def wait_for_navigation(self, timeout: int = 30000) -> None:
+        """Wait for navigation to complete.
+
+        Args:
+            timeout: Maximum time to wait in milliseconds. Defaults to 30000.
+
+        Raises:
+            RuntimeError: If browser not launched.
+        """
+        if not self._page:
+            raise RuntimeError("Browser not launched")
+        await self._page.wait_for_load_state("networkidle", timeout=timeout)
+
+    async def wait_for_element(self, selector: str, timeout: int = 5000) -> bool:
+        """Wait for an element to appear on the page.
+
+        Args:
+            selector: CSS selector for the element.
+            timeout: Maximum time to wait in milliseconds. Defaults to 5000.
+
+        Returns:
+            True if element found, False if timeout.
+
+        Raises:
+            RuntimeError: If browser not launched.
+        """
+        from playwright.async_api import TimeoutError as PlaywrightTimeoutError
+
+        if not self._page:
+            raise RuntimeError("Browser not launched")
+
+        try:
+            await self._page.wait_for_selector(selector, timeout=timeout)
+            return True
+        except PlaywrightTimeoutError:
+            return False
+
+    async def execute_action(self, action: BrowserAction) -> Any:
+        """Execute a BrowserAction on the page.
+
+        Args:
+            action: The BrowserAction to execute.
+
+        Returns:
+            Action-specific result (e.g., screenshot bytes for SCREENSHOT).
+
+        Raises:
+            RuntimeError: If browser not launched.
+        """
+        from subterminator.core.protocols import ActionType
+
+        if not self._page:
+            raise RuntimeError("Browser not launched")
+
+        if action.action_type == ActionType.CLICK:
+            # Try selector first, fall back to ARIA if provided
+            try:
+                element = await self._page.wait_for_selector(
+                    action.selector,
+                    timeout=action.timeout or 5000
+                )
+                if element:
+                    await element.click()
+                    return None
+            except Exception:
+                pass
+
+            # Try fallback role
+            if action.fallback_role:
+                role, name = action.fallback_role
+                locator = self._page.get_by_role(cast(Any, role), name=name)
+                await locator.click(timeout=action.timeout or 5000)
+            return None
+
+        elif action.action_type == ActionType.FILL:
+            await self._page.fill(action.selector, action.value or "")
+            return None
+
+        elif action.action_type == ActionType.SELECT:
+            await self._page.select_option(action.selector, action.value)
+            return None
+
+        elif action.action_type == ActionType.NAVIGATE:
+            await self._page.goto(
+                action.selector,  # URL is stored in selector
+                timeout=action.timeout or 30000,
+                wait_until="networkidle"
+            )
+            return None
+
+        elif action.action_type == ActionType.WAIT:
+            await self._page.wait_for_timeout(action.timeout or 1000)
+            return None
+
+        elif action.action_type == ActionType.SCREENSHOT:
+            path = action.selector if action.selector else None
+            return await self._page.screenshot(path=path, full_page=True)
+
+        return None
+
+    # =====================================================================
+    # NEW OPTIONAL METHODS (for AI agent) - Phase 2
+    # =====================================================================
+
+    async def evaluate(self, script: str) -> Any:
+        """Execute JavaScript in the browser context.
+
+        Args:
+            script: JavaScript code to execute.
+
+        Returns:
+            The result of the script execution.
+
+        Raises:
+            RuntimeError: If browser not launched.
+        """
+        if not self._page:
+            raise RuntimeError("Browser not launched")
+        return await self._page.evaluate(script)
+
+    def _prune_a11y_tree(
+        self,
+        node: dict | None,
+        depth: int = 0,
+        max_depth: int = 5,
+    ) -> dict | None:
+        """Prune accessibility tree to manageable size.
+
+        Args:
+            node: Current node in the tree.
+            depth: Current depth.
+            max_depth: Maximum depth to traverse.
+
+        Returns:
+            Pruned node or None if beyond max_depth.
+        """
+        if depth > max_depth or node is None:
+            return None
+
+        pruned = {
+            "role": node.get("role", ""),
+            "name": node.get("name", "")[:100],  # Truncate long names
+        }
+
+        if "children" in node:
+            pruned["children"] = [
+                self._prune_a11y_tree(c, depth + 1, max_depth)
+                for c in node["children"]
+                if c
+            ]
+            pruned["children"] = [c for c in pruned["children"] if c]
+
+        return pruned
+
+    async def accessibility_tree(self) -> str:
+        """Get accessibility tree as JSON string.
+
+        Uses Playwright's page.accessibility.snapshot() and prunes
+        to max_depth=5 for reasonable context size.
+
+        Returns:
+            JSON string of pruned accessibility tree, or "{}" if unavailable.
+
+        Raises:
+            RuntimeError: If browser not launched.
+        """
+        if not self._page:
+            raise RuntimeError("Browser not launched")
+
+        try:
+            snapshot = await self._page.accessibility.snapshot()  # type: ignore[attr-defined]
+            if snapshot is None:
+                return "{}"
+            pruned = self._prune_a11y_tree(snapshot, max_depth=5)
+            return json.dumps(pruned, indent=2)
+        except (AttributeError, NotImplementedError):
+            # Accessibility API may not be available in all browser modes (e.g., CDP)
+            return "{}"
+
+    async def click_coordinates(self, x: int, y: int) -> None:
+        """Click at specific pixel coordinates.
+
+        Args:
+            x: X coordinate relative to viewport.
+            y: Y coordinate relative to viewport.
+
+        Raises:
+            RuntimeError: If browser not launched.
+            ValueError: If coordinates are negative.
+        """
+        if not self._page:
+            raise RuntimeError("Browser not launched")
+        if x < 0 or y < 0:
+            raise ValueError(f"Coordinates must be non-negative: ({x}, {y})")
+
+        await self._page.mouse.click(x, y)
+
+    async def click_by_role(self, role: str, name: str | None = None) -> None:
+        """Click element by ARIA role.
+
+        Args:
+            role: The ARIA role to search for.
+            name: Optional accessible name to match.
+
+        Raises:
+            RuntimeError: If browser not launched.
+            ElementNotFound: If no matching element found.
+        """
+        if not self._page:
+            raise RuntimeError("Browser not launched")
+
+        try:
+            locator = self._page.get_by_role(cast(Any, role), name=name)
+            await locator.click(timeout=3000)
+        except PlaywrightTimeoutError:
+            raise ElementNotFound(f"No element with role={role} name='{name}'")
+
+    async def click_by_text(self, text: str, exact: bool = False) -> None:
+        """Click element by visible text.
+
+        Args:
+            text: The text to search for.
+            exact: If True, exact match. If False, substring match.
+
+        Raises:
+            RuntimeError: If browser not launched.
+            ElementNotFound: If no matching element found.
+        """
+        if not self._page:
+            raise RuntimeError("Browser not launched")
+
+        try:
+            locator = self._page.get_by_text(text, exact=exact)
+            await locator.click(timeout=3000)
+        except PlaywrightTimeoutError:
+            raise ElementNotFound(f"No element with text '{text}'")
+
+    async def viewport_size(self) -> tuple[int, int]:
+        """Get current viewport dimensions.
+
+        Returns:
+            Tuple of (width, height) in pixels.
+
+        Raises:
+            RuntimeError: If browser not launched.
+        """
+        if not self._page:
+            raise RuntimeError("Browser not launched")
+
+        size = self._page.viewport_size
+        return (size["width"], size["height"]) if size else (1280, 720)
+
+    async def scroll_position(self) -> tuple[int, int]:
+        """Get current scroll position.
+
+        Returns:
+            Tuple of (x, y) scroll offset in pixels.
+
+        Raises:
+            RuntimeError: If browser not launched.
+        """
+        if not self._page:
+            raise RuntimeError("Browser not launched")
+
+        pos = await self._page.evaluate("[window.scrollX, window.scrollY]")
+        return (int(pos[0]), int(pos[1]))
+
+    async def scroll_to(self, x: int, y: int) -> None:
+        """Scroll viewport to absolute position.
+
+        Args:
+            x: Horizontal scroll position in pixels.
+            y: Vertical scroll position in pixels.
+
+        Raises:
+            RuntimeError: If browser not launched.
+        """
+        if not self._page:
+            raise RuntimeError("Browser not launched")
+
+        await self._page.evaluate(f"window.scrollTo({x}, {y})")
+
+    def supports_accessibility_tree(self) -> bool:
+        """Check if accessibility_tree() is available.
+
+        Returns:
+            True - PlaywrightBrowser supports accessibility tree.
+        """
+        return True
+
+    def supports_coordinate_clicking(self) -> bool:
+        """Check if click_coordinates() is available.
+
+        Returns:
+            True - PlaywrightBrowser supports coordinate clicking.
+        """
+        return True
+
+    def supports_text_clicking(self) -> bool:
+        """Check if click_by_text() is available.
+
+        Returns:
+            True - PlaywrightBrowser supports text clicking.
+        """
+        return True
+
+    async def click_by_bbox(
+        self,
+        selector: str | None = None,
+        text: str | None = None,
+        aria_role: str | None = None,
+        aria_name: str | None = None,
+    ) -> dict[str, Any]:
+        """Find element and click at center using bounding box.
+
+        Uses JavaScript to find the element and get its bounding box,
+        then clicks at the center coordinates. This is more reliable
+        than Playwright's click() on complex UIs like Netflix.
+
+        Args:
+            selector: CSS selector to find element.
+            text: Text content to search for.
+            aria_role: ARIA role to search for.
+            aria_name: ARIA name to match (used with aria_role).
+
+        Returns:
+            Dict with 'found', 'clicked', 'element_info' keys.
+            element_info contains x, y, width, height, centerX, centerY.
+
+        Raises:
+            RuntimeError: If browser not launched.
+            ValueError: If no search criteria provided.
+        """
+        if not self._page:
+            raise RuntimeError("Browser not launched")
+
+        if not any([selector, text, aria_role]):
+            raise ValueError("Must provide selector, text, or aria_role")
+
+        # Build JavaScript to find element and get bounding box
+        js_find_element = """
+        (options) => {
+            let el = null;
+
+            // Try CSS selector first
+            if (options.selector) {
+                el = document.querySelector(options.selector);
+            }
+
+            // Try ARIA role/name
+            if (!el && options.ariaRole) {
+                const roleSelector = '[role="' + options.ariaRole + '"]';
+                const elements = document.querySelectorAll(roleSelector);
+                for (const e of elements) {
+                    if (!options.ariaName ||
+                        e.getAttribute('aria-label')?.includes(options.ariaName) ||
+                        e.textContent?.includes(options.ariaName)) {
+                        if (e.offsetParent !== null) {
+                            el = e;
+                            break;
+                        }
+                    }
+                }
+            }
+
+            // Try text content
+            if (!el && options.text) {
+                const walker = document.createTreeWalker(
+                    document.body,
+                    NodeFilter.SHOW_ELEMENT,
+                    null,
+                    false
+                );
+                while (walker.nextNode()) {
+                    const node = walker.currentNode;
+                    if (node.textContent?.includes(options.text) &&
+                        node.offsetParent !== null) {
+                        const rect = node.getBoundingClientRect();
+                        // Prefer smaller, more specific elements
+                        if (rect.width > 0 && rect.width < 600 && rect.height < 200) {
+                            el = node;
+                            break;
+                        }
+                    }
+                }
+            }
+
+            if (el && el.offsetParent !== null) {
+                const rect = el.getBoundingClientRect();
+                if (rect.width > 0 && rect.height > 0) {
+                    return {
+                        found: true,
+                        x: rect.x,
+                        y: rect.y,
+                        width: rect.width,
+                        height: rect.height,
+                        centerX: rect.x + rect.width / 2,
+                        centerY: rect.y + rect.height / 2,
+                        tagName: el.tagName,
+                        text: el.textContent?.trim().substring(0, 100) || ''
+                    };
+                }
+            }
+            return { found: false };
+        }
+        """
+
+        options = {
+            "selector": selector,
+            "text": text,
+            "ariaRole": aria_role,
+            "ariaName": aria_name,
+        }
+
+        js_call = f"({js_find_element})({json.dumps(options)})"
+        result = await self._page.evaluate(js_call)
+
+        if result.get("found"):
+            # Click at center of element
+            center_x = int(result["centerX"])
+            center_y = int(result["centerY"])
+            await self._page.mouse.click(center_x, center_y)
+            return {
+                "found": True,
+                "clicked": True,
+                "element_info": result,
+            }
+
+        return {"found": False, "clicked": False, "element_info": None}

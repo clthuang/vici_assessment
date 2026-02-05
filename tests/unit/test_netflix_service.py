@@ -102,9 +102,9 @@ class TestNetflixServiceEntryUrl:
     """Tests for NetflixService entry_url property."""
 
     def test_entry_url_returns_live_url_for_live_target(self):
-        """Test entry_url returns Netflix account URL for live target."""
+        """Test entry_url returns Netflix membership URL for live target."""
         service = NetflixService(target="live")
-        assert service.entry_url == "https://www.netflix.com/account"
+        assert service.entry_url == "https://www.netflix.com/account/membership"
 
     def test_entry_url_returns_mock_url_for_mock_target(self):
         """Test entry_url returns mock server URL for mock target."""
@@ -137,10 +137,10 @@ class TestNetflixServiceSelectors:
         assert "[data-uia='action-cancel-membership']" in selectors.cancel_link.css
 
     def test_cancel_link_has_aria_fallback(self):
-        """Test cancel link has ARIA fallback."""
+        """Test cancel link has ARIA fallback for manage membership."""
         service = NetflixService()
         selectors = service.selectors
-        assert selectors.cancel_link.aria == ("link", "Cancel Membership")
+        assert selectors.cancel_link.aria == ("link", "Manage membership")
 
     def test_decline_offer_selectors_configured(self):
         """Test decline offer selectors are properly configured as SelectorConfig."""
@@ -280,9 +280,9 @@ class TestNetflixServiceConfig:
         assert service.config.name == "Netflix"
 
     def test_config_has_correct_entry_url(self):
-        """Test config has correct entry URL."""
+        """Test config has correct entry URL for membership page."""
         service = NetflixService()
-        assert service.config.entry_url == "https://www.netflix.com/account"
+        assert service.config.entry_url == "https://www.netflix.com/account/membership"
 
     def test_config_has_correct_mock_entry_url(self):
         """Test config has correct mock entry URL."""

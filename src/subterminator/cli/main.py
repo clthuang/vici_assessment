@@ -1,27 +1,18 @@
 """Main CLI application entry point."""
 
 import asyncio
-from pathlib import Path
 
 import typer
 from rich.console import Console
 
 from subterminator import __version__
-from subterminator.cli.output import OutputFormatter, PromptType
+from subterminator.cli.output import OutputFormatter
 from subterminator.cli.prompts import is_interactive, select_service
-from subterminator.core.ai import ClaudeInterpreter, HeuristicInterpreter
-from subterminator.core.browser import PlaywrightBrowser
-from subterminator.core.engine import CancellationEngine
-from subterminator.services import create_service, get_mock_pages_dir
-from subterminator.services.mock import MockServer
 from subterminator.services.registry import (
     get_available_services,
     get_service_by_id,
     suggest_service,
 )
-from subterminator.utils.config import ConfigLoader
-from subterminator.utils.exceptions import ConfigurationError
-from subterminator.utils.session import SessionLogger
 
 console = Console()
 
@@ -64,12 +55,6 @@ def cancel(
         "-n",
         help="Run without making actual changes (stops at final confirmation)",
     ),
-    target: str = typer.Option(
-        "live",
-        "--target",
-        "-t",
-        help="Target environment: 'live' for real site, 'mock' for local testing",
-    ),
     headless: bool = typer.Option(
         False,
         "--headless",
@@ -80,12 +65,6 @@ def cancel(
         "--verbose",
         "-V",
         help="Show detailed progress information",
-    ),
-    output_dir: Path | None = typer.Option(
-        None,
-        "--output-dir",
-        "-o",
-        help="Directory for session artifacts (screenshots, logs)",
     ),
     service: str | None = typer.Option(
         None,
@@ -103,30 +82,49 @@ def cancel(
         "--plain",
         help="Disable colors and animations",
     ),
-    cdp_url: str | None = typer.Option(
-        None,
-        "--cdp-url",
-        help="Connect to existing Chrome via CDP URL. Start Chrome with: "
-        "chrome --remote-debugging-port=9222",
-    ),
     profile_dir: str | None = typer.Option(
         None,
         "--profile-dir",
         help="Use persistent browser profile directory for session persistence",
     ),
-    use_chromium: bool = typer.Option(
+    model: str | None = typer.Option(
+        None,
+        "--model",
+        help="LLM model override (default: claude-sonnet-4-20250514)",
+    ),
+    max_turns: int = typer.Option(
+        20,
+        "--max-turns",
+        help="Maximum orchestration turns",
+    ),
+    no_checkpoint: bool = typer.Option(
         False,
-        "--use-chromium",
-        help="Use Playwright's Chromium instead of system Chrome (for testing/CI)",
+        "--no-checkpoint",
+        help="Disable human checkpoints",
     ),
 ) -> None:
-    """Cancel a subscription service."""
-    # Validate mutual exclusivity of browser options early (before browser init)
-    if cdp_url and profile_dir:
-        console.print(
-            "[red]Error:[/red] --cdp-url and --profile-dir cannot be used together"
-        )
-        raise typer.Exit(code=1)
+    """Cancel a subscription service.
+
+    Uses AI-driven MCP orchestration to navigate the cancellation flow.
+
+    Exit codes:
+    - 0: Success (cancellation completed)
+    - 1: Failure (cancellation failed)
+    - 2: User cancelled (via Ctrl+C or menu)
+    - 3: Invalid service
+    - 5: MCP connection error
+    - 130: SIGINT during orchestration
+    """
+    from dotenv import load_dotenv
+
+    load_dotenv()  # Load .env file before accessing env vars
+
+    from subterminator.mcp_orchestrator import LLMClient, MCPClient, TaskRunner
+    from subterminator.mcp_orchestrator.exceptions import (
+        ConfigurationError as MCPConfigError,
+    )
+    from subterminator.mcp_orchestrator.exceptions import MCPConnectionError
+    from subterminator.mcp_orchestrator.services import netflix  # noqa: F401
 
     # Service resolution
     if service:
@@ -155,117 +153,76 @@ def cancel(
         typer.echo("Usage: subterminator cancel --service <name>")
         raise typer.Exit(code=3)
 
-    # T15.7: ToS disclaimer
+    # ToS disclaimer
     formatter = OutputFormatter(verbose=verbose)
     formatter.show_warning(
         "This tool automates browser interactions with subscription services.\n"
         "Use at your own risk. The service's Terms of Service may prohibit automation."
     )
 
+    # MCP Orchestration
+    console.print("[bold blue]MCP Orchestration Mode[/bold blue]")
+    console.print(f"Service: {selected_service}")
+    console.print(f"Max turns: {max_turns}")
+    if verbose:
+        console.print(f"Model: {model or 'default'}")
+        console.print(f"Checkpoints: {'disabled' if no_checkpoint else 'enabled'}")
+
     try:
-        # Load configuration
-        config = ConfigLoader.load()
-        if output_dir:
-            config.output_dir = output_dir
+        # Create clients
+        mcp = MCPClient(profile_dir=profile_dir)
+        llm = LLMClient(model_name=model)
 
-        # Start mock server if using mock target
-        mock_server = None
-        if target == "mock":
-            mock_pages_path = get_mock_pages_dir(selected_service)
-            project_root = Path(__file__).parent.parent.parent.parent
-            mock_pages_dir = project_root / mock_pages_path
-            if not mock_pages_dir.exists():
-                console.print(
-                    f"[red]Error: Mock pages not found at {mock_pages_dir}[/red]"
-                )
-                raise typer.Exit(code=4)
-            mock_server = MockServer(mock_pages_dir, port=8000)
-            mock_server.start()
-
-        # Create components
-        service_obj = create_service(selected_service, target)
-
-        # Determine browser mode: default to system Chrome unless --use-chromium
-        effective_cdp_url = cdp_url
-        if not use_chromium and not cdp_url and not profile_dir:
-            # Default: launch system Chrome with remote debugging
-            from subterminator.core.browser import launch_system_chrome
-
-            if verbose:
-                console.print("[dim]Launching system Chrome...[/dim]")
-            effective_cdp_url = launch_system_chrome()
-            if verbose:
-                console.print(f"[dim]Connected via {effective_cdp_url}[/dim]")
-
-        browser = PlaywrightBrowser(
-            headless=headless,
-            cdp_url=effective_cdp_url,
-            user_data_dir=profile_dir,
+        # Create runner
+        runner = TaskRunner(
+            mcp_client=mcp,
+            llm_client=llm,
+            disable_checkpoints=no_checkpoint,
         )
-        heuristic = HeuristicInterpreter()
 
-        # Create AI interpreter if API key available
-        ai = None
-        if config.anthropic_api_key:
-            ai = ClaudeInterpreter(api_key=config.anthropic_api_key)
-        elif verbose:
-            formatter.show_warning("No ANTHROPIC_API_KEY set - AI detection disabled")
+        # Run orchestration
+        console.print("\n[dim]Starting orchestration...[/dim]\n")
 
-        # Create session logger
-        session = SessionLogger(
-            output_dir=config.output_dir,
+        result = asyncio.run(runner.run(
             service=selected_service,
-            target=target,
-        )
+            max_turns=max_turns,
+            dry_run=dry_run,
+        ))
 
-        # Create input callback for human checkpoints
-        def input_callback(checkpoint_type: str, timeout: int) -> str | None:
-            prompt_type_map = {
-                "AUTH": PromptType.AUTH,
-                "CONFIRM": PromptType.CONFIRM,
-                "UNKNOWN": PromptType.UNKNOWN,
-            }
-            prompt_type = prompt_type_map.get(checkpoint_type, PromptType.UNKNOWN)
-            return formatter.show_human_prompt(prompt_type, timeout)
+        # Display result
+        if result.success:
+            console.print("\n[green bold]Success![/green bold]")
+            console.print(f"Verified: {result.verified}")
+            console.print(f"Turns: {result.turns}")
+            if result.final_url:
+                console.print(f"Final URL: {result.final_url}")
+            raise typer.Exit(code=0)
+        else:
+            console.print("\n[red bold]Failed[/red bold]")
+            console.print(f"Reason: {result.reason}")
+            console.print(f"Turns: {result.turns}")
+            if result.error:
+                console.print(f"Error: {result.error}")
+            if result.final_url:
+                console.print(f"Final URL: {result.final_url}")
 
-        # Create engine
-        engine = CancellationEngine(
-            service=service_obj,
-            browser=browser,
-            heuristic=heuristic,
-            ai=ai,
-            session=session,
-            config=config,
-            output_callback=formatter.show_progress,
-            input_callback=input_callback,
-        )
-
-        # Show dry-run notice
-        if dry_run:
-            formatter.show_dry_run_notice()
-
-        try:
-            # Run the cancellation
-            result = asyncio.run(engine.run(dry_run=dry_run))
-
-            # T15.6: Exit code handling
-            if result.success:
-                formatter.show_success(result)
-                raise typer.Exit(code=0)
-            elif result.state.name == "ABORTED":
-                print("\nOperation aborted.")
-                raise typer.Exit(code=2)
+            # Map reason to exit code
+            if result.reason == "human_rejected" and "SIGINT" in (result.error or ""):
+                raise typer.Exit(code=130)
+            elif result.reason == "mcp_error":
+                raise typer.Exit(code=5)
             else:
-                formatter.show_failure(result)
                 raise typer.Exit(code=1)
-        finally:
-            # Stop mock server if it was started
-            if mock_server:
-                mock_server.stop()
 
-    except ConfigurationError as e:
+    except MCPConfigError as e:
         console.print(f"[red]Configuration error: {e}[/red]")
-        raise typer.Exit(code=4)
+        raise typer.Exit(code=2)
+    except MCPConnectionError as e:
+        console.print(f"[red]MCP connection error: {e}[/red]")
+        raise typer.Exit(code=5)
+    except KeyboardInterrupt:
+        console.print("\n[yellow]Cancelled by user[/yellow]")
+        raise typer.Exit(code=130)
 
 
 if __name__ == "__main__":

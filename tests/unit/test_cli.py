@@ -95,63 +95,53 @@ class TestCancelCommandValidation:
 class TestCancelCommandOptions:
     """Tests for cancel command options."""
 
-    @patch("subterminator.cli.main.ConfigLoader")
-    @patch("subterminator.cli.main.CancellationEngine")
-    @patch("subterminator.cli.main.PlaywrightBrowser")
-    @patch("subterminator.cli.main.create_service")
-    @patch("subterminator.cli.main.SessionLogger")
-    @patch("subterminator.cli.main.HeuristicInterpreter")
-    def test_dry_run_option_accepted(
-        self,
-        mock_heuristic: MagicMock,
-        mock_session: MagicMock,
-        mock_create_service: MagicMock,
-        mock_browser: MagicMock,
-        mock_engine: MagicMock,
-        mock_config_loader: MagicMock,
-    ) -> None:
-        """--dry-run option should be accepted."""
-        # Mock the config
-        mock_config = MagicMock()
-        mock_config.anthropic_api_key = None
-        mock_config.output_dir = MagicMock()
-        mock_config_loader.load.return_value = mock_config
-
-        # Mock session to have screenshots_dir attribute
-        mock_session_instance = MagicMock()
-        mock_session_instance.session_dir = MagicMock()
-        mock_session.return_value = mock_session_instance
-
-        # Mock engine run to return successful result
-        from subterminator.core.protocols import CancellationResult, State
-        mock_result = CancellationResult(
-            success=True,
-            state=State.COMPLETE,
-            message="Test completed",
-        )
-        mock_engine_instance = MagicMock()
-        mock_engine_instance.run = MagicMock(return_value=mock_result)
-        mock_engine.return_value = mock_engine_instance
-
-        result = runner.invoke(app, ["cancel", "--service", "netflix", "--dry-run"])
-        # Should not fail on the argument itself - check no error about the option
-        has_dry_run_error = "dry-run" in result.output.lower()
-        has_error = "error" in result.output.lower()
-        assert not (has_dry_run_error and has_error)
-
     def test_help_shows_all_options(self) -> None:
         """Help should show all available options."""
         result = runner.invoke(app, ["cancel", "--help"])
         output = strip_ansi(result.output)
         assert result.exit_code == 0
         assert "--dry-run" in output
-        assert "--target" in output
         assert "--headless" in output
         assert "--verbose" in output
-        assert "--output-dir" in output
         assert "--service" in output
         assert "--no-input" in output
         assert "--plain" in output
+        assert "--model" in output
+        assert "--max-turns" in output
+        assert "--no-checkpoint" in output
+        assert "--profile-dir" in output
+
+    @patch("subterminator.mcp_orchestrator.MCPClient")
+    @patch("subterminator.mcp_orchestrator.LLMClient")
+    @patch("subterminator.mcp_orchestrator.TaskRunner")
+    def test_dry_run_option_accepted(
+        self,
+        mock_runner_class: MagicMock,
+        mock_llm_class: MagicMock,
+        mock_mcp_class: MagicMock,
+    ) -> None:
+        """--dry-run option should be accepted and passed to TaskRunner."""
+        from subterminator.mcp_orchestrator.task_runner import TaskResult
+
+        # Mock TaskResult
+        mock_result = TaskResult(
+            success=True,
+            verified=True,
+            turns=5,
+            reason="completed",
+            final_url="https://netflix.com/account",
+        )
+
+        mock_runner = MagicMock()
+        mock_runner.run = MagicMock(return_value=mock_result)
+        mock_runner_class.return_value = mock_runner
+
+        result = runner.invoke(app, ["cancel", "--service", "netflix", "--dry-run"])
+        # Should attempt to run MCP orchestration
+        assert mock_runner.run.called
+        # Verify dry_run was passed
+        call_kwargs = mock_runner.run.call_args.kwargs
+        assert call_kwargs.get("dry_run") is True
 
 
 class TestVersionFlag:

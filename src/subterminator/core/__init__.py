@@ -4,32 +4,48 @@ This module exports the foundational types and protocols used throughout
 the SubTerminator application.
 """
 
-from subterminator.core.ai import ClaudeInterpreter, HeuristicInterpreter
 from subterminator.core.browser import PlaywrightBrowser
-from subterminator.core.engine import CancellationEngine, with_retry
 from subterminator.core.protocols import (
+    ActionPlan,
+    ActionRecord,
+    ActionType,
+    AgentContext,
     AIInterpretation,
     AIInterpreterProtocol,
+    BrowserAction,
+    BrowserElement,
     BrowserProtocol,
     CancellationResult,
+    ErrorRecord,
+    ExecutionResult,
+    PlannedAction,
     ServiceConfigProtocol,
     ServiceProtocol,
     State,
+    TargetStrategy,
+    ValidationResult,
 )
 from subterminator.core.states import CancellationStateMachine
 
 __all__ = [
+    "ActionPlan",
+    "ActionRecord",
+    "ActionType",
+    "AgentContext",
     "AIInterpretation",
     "AIInterpreterProtocol",
+    "BrowserAction",
+    "BrowserElement",
     "BrowserProtocol",
-    "CancellationEngine",
     "CancellationResult",
     "CancellationStateMachine",
-    "ClaudeInterpreter",
-    "HeuristicInterpreter",
+    "ErrorRecord",
+    "ExecutionResult",
+    "PlannedAction",
     "PlaywrightBrowser",
     "ServiceConfigProtocol",
     "ServiceProtocol",
     "State",
-    "with_retry",
+    "TargetStrategy",
+    "ValidationResult",
 ]
