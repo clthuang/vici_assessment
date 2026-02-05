@@ -22,8 +22,8 @@ curl -LsSf https://astral.sh/uv/install.sh | sh
 # Install dependencies
 uv sync && uv run playwright install chromium
 
-# Test with mock server (safe, no real account needed)
-uv run subterminator cancel --service netflix --target mock --dry-run
+# Run with dry-run mode (safe, stops at final confirmation)
+uv run subterminator cancel --service netflix --dry-run
 ```
 
 ## Installation
@@ -36,7 +36,7 @@ cd subterminator
 uv sync
 uv run playwright install chromium
 
-# Optional: Set up AI-powered detection
+# Required: Set up API key for LLM orchestration
 export ANTHROPIC_API_KEY="your-api-key-here"
 ```
 
@@ -53,16 +53,13 @@ subterminator cancel  # Opens interactive service menu
 ```bash
 subterminator cancel --service netflix              # Live (USE WITH CAUTION)
 subterminator cancel --service netflix --dry-run   # Stop at final confirmation
-subterminator cancel --service netflix --target mock  # Use mock server
+subterminator cancel --service netflix --headless  # Run without visible browser
 ```
 
-### Browser Session Reuse
+### Browser Session Persistence
 
 ```bash
-# Connect to Chrome with remote debugging
-subterminator cancel --service netflix --cdp-url http://localhost:9222
-
-# Or use a persistent browser profile
+# Use a persistent browser profile (keeps login sessions)
 subterminator cancel --service netflix --profile-dir ~/.subterminator/chrome-profile
 ```
 
@@ -72,23 +69,21 @@ subterminator cancel --service netflix --profile-dir ~/.subterminator/chrome-pro
 |--------|-------|-------------|
 | `--service` | `-s` | Service to cancel (bypasses interactive menu) |
 | `--dry-run` | `-n` | Stop at final confirmation |
-| `--target` | `-t` | `live` (default) or `mock` for testing |
 | `--headless` | | Run browser without visible window |
 | `--verbose` | `-V` | Show detailed progress |
-| `--output-dir` | `-o` | Directory for screenshots and logs |
-| `--cdp-url` | | Connect to existing Chrome via CDP |
 | `--profile-dir` | | Use persistent browser profile |
 | `--plain` | | Disable colors and animations |
 | `--no-input` | | Force non-interactive mode |
+| `--model` | | LLM model override (default: claude-sonnet-4-20250514) |
+| `--max-turns` | | Maximum orchestration turns (default: 20) |
+| `--no-checkpoint` | | Disable human checkpoints |
 
 ## Configuration
 
 | Variable | Description | Default |
 |----------|-------------|---------|
-| `ANTHROPIC_API_KEY` | API key for Claude Vision AI | (none) |
-| `SUBTERMINATOR_OUTPUT` | Output directory | `./output` |
-| `SUBTERMINATOR_PAGE_TIMEOUT` | Page load timeout (ms) | `30000` |
-| `SUBTERMINATOR_MODEL` | LLM model for MCP mode | `claude-sonnet-4-20250514` |
+| `ANTHROPIC_API_KEY` | API key for Claude LLM (required) | (none) |
+| `SUBTERMINATOR_MODEL` | LLM model | `claude-sonnet-4-20250514` |
 
 ## What to Expect
 
@@ -111,11 +106,12 @@ subterminator cancel --service netflix --profile-dir ~/.subterminator/chrome-pro
 
 | Code | Meaning |
 |------|---------|
-| 0 | Success |
-| 1 | Failure |
-| 2 | User aborted |
-| 3 | Invalid arguments |
-| 4 | Configuration error |
+| 0 | Success (cancellation completed) |
+| 1 | Failure (cancellation failed) |
+| 2 | User cancelled (via Ctrl+C or menu) |
+| 3 | Invalid service |
+| 5 | MCP connection error |
+| 130 | SIGINT during orchestration |
 
 ## Development
 

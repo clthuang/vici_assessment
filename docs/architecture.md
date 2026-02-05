@@ -19,15 +19,7 @@ flowchart TB
         prompts["prompts.py<br/>User Input"]
     end
 
-    subgraph Legacy["Legacy Orchestrator (core/)"]
-        engine["CancellationEngine<br/>State Machine Driver"]
-        states["StateMachine<br/>12 States"]
-        heuristic["HeuristicInterpreter<br/>URL/Text Patterns"]
-        claude["ClaudeInterpreter<br/>Vision AI"]
-        browser["PlaywrightBrowser<br/>Direct Control"]
-    end
-
-    subgraph MCP["MCP Orchestrator (mcp_orchestrator/)"]
+    subgraph MCP["MCP Orchestrator"]
         runner["TaskRunner<br/>Main Loop"]
         llm["LLMClient<br/>Claude/GPT-4"]
         mcpc["MCPClient<br/>Server Connection"]
@@ -47,22 +39,12 @@ flowchart TB
         others["Other Services..."]
     end
 
-    main --> engine
     main --> runner
-
-    engine --> states
-    engine --> heuristic
-    engine --> claude
-    engine --> browser
 
     runner --> llm
     runner --> mcpc
     runner --> checkpoint
     runner --> snapshot
-
-    heuristic --> netflix
-    claude --> anthropic
-    browser --> chromium
 
     llm --> anthropic
     llm --> openai
@@ -153,17 +135,6 @@ flowchart TD
 | User Prompts | `cli/prompts.py` | Interactive service selection, confirmation dialogs |
 | Accessibility | `cli/accessibility.py` | Plain mode, non-interactive mode support |
 
-### Legacy Orchestrator (core/)
-
-| Component | File | Responsibility |
-|-----------|------|----------------|
-| CancellationEngine | `core/engine.py` | Main loop, state handling, detection cascade |
-| StateMachine | `core/states.py` | 12 states with explicit transitions |
-| HeuristicInterpreter | `core/ai.py` | Fast URL/text pattern matching |
-| ClaudeInterpreter | `core/ai.py` | Vision-based page analysis |
-| PlaywrightBrowser | `core/browser.py` | Direct browser control with stealth |
-| Protocols | `core/protocols.py` | Type definitions (State, BrowserProtocol) |
-
 ### MCP Orchestrator (mcp_orchestrator/)
 
 | Component | File | Responsibility |
@@ -182,10 +153,17 @@ flowchart TD
 
 | Component | File | Responsibility |
 |-----------|------|----------------|
-| Netflix (Legacy) | `services/netflix.py` | URLs, selectors, text indicators |
-| Netflix (MCP) | `mcp_orchestrator/services/netflix.py` | URLs, predicates, LLM hints |
+| Netflix | `mcp_orchestrator/services/netflix.py` | URLs, predicates, LLM hints |
 | Service Registry | `services/registry.py` | Service lookup, validation |
 | Mock Server | `services/mock.py` | Local testing server |
+
+### Core Utilities
+
+| Component | File | Responsibility |
+|-----------|------|----------------|
+| Protocols | `core/protocols.py` | Shared types (State enum) |
+| Browser | `core/browser.py` | PlaywrightBrowser helper |
+| States | `core/states.py` | State transition logic (reference) |
 
 ### Utilities
 
@@ -371,3 +349,14 @@ The message history accumulates:
 4. Tool result
 5. (If navigation) User message with updated snapshot
 6. Repeat until complete_task
+
+---
+
+## Image Regeneration
+
+The `images/architecture-high-level.png` needs regeneration to match the updated mermaid diagram. Use mermaid-cli if available:
+
+```bash
+# If mmdc is installed
+mmdc -i architecture.md -o images/architecture-high-level.png -w 800
+```

@@ -9,58 +9,46 @@ A comprehensive guide for developers working on the SubTerminator codebase.
 - [Architecture Overview](#architecture-overview)
 - [Layer-by-Layer Guide](#layer-by-layer-guide)
   - [CLI Layer](#cli-layer)
-  - [Legacy Orchestrator (core/engine)](#legacy-orchestrator-coreengine)
   - [MCP Orchestrator](#mcp-orchestrator)
-  - [State Machine](#state-machine)
-  - [Browser Automation](#browser-automation)
-  - [AI Detection](#ai-detection)
+  - [Core Utilities](#core-utilities)
   - [Services](#services)
 - [Development Workflow](#development-workflow)
 - [How-To Guides](#how-to-guides)
   - [Adding a New Service](#adding-a-new-service)
-  - [Adding a New State](#adding-a-new-state)
-  - [Debugging Detection Issues](#debugging-detection-issues)
+  - [Debugging Issues](#debugging-issues)
 - [Architecture Decision Records](#architecture-decision-records)
 
 ---
 
 ## Architecture Overview
 
-SubTerminator has two orchestration paths:
+SubTerminator uses LLM-driven orchestration with the Playwright MCP server:
 
 ```
 CLI Layer (user interaction)
     |
-    +---> Legacy Path (core/)              MCP Path (mcp_orchestrator/)
-    |     - State machine-driven           - LLM-driven tool orchestration
-    |     - Heuristic + AI detection       - Playwright MCP server
-    |     - Hardcoded selectors            - Dynamic page understanding
-    |                                       |
-    +---> Browser (Playwright)         +---> MCP Server (Playwright)
+    v
+MCP Orchestrator (mcp_orchestrator/)
+    - LLM-driven tool orchestration
+    - Playwright MCP server
+    - Dynamic page understanding
+    |
+    v
+MCP Server (Playwright) --> Browser
 ```
-
-### Two Orchestration Patterns
-
-| Aspect | Legacy (core/) | MCP (mcp_orchestrator/) |
-|--------|----------------|-------------------------|
-| **Approach** | State machine with explicit transitions | LLM decides next action each turn |
-| **Detection** | Heuristic patterns + Claude fallback | LLM interprets page snapshots |
-| **Selectors** | Hardcoded CSS/XPath per service | LLM uses element refs from snapshot |
-| **Flexibility** | Requires code changes for UI updates | Adapts to UI changes via reasoning |
-| **Cost** | Minimal API calls | API call per turn |
 
 ### Core Intuition
 
 1. **Human checkpoints for irreversible actions** - Authentication and final confirmation always require human interaction. The tool assists, never acts autonomously on critical decisions.
 
-2. **Session logging for debugging** - Every state transition, screenshot, and AI call is logged.
+2. **LLM-driven adaptability** - The LLM interprets page snapshots and decides the next action, adapting to UI changes without code updates.
 
-3. **Service-specific configuration** - Each service defines its URLs, selectors, and predicates.
+3. **Service-specific configuration** - Each service defines its URLs, predicates, and LLM hints.
 
-### Data Flow (MCP Path)
+### Data Flow
 
 ```
-User runs: subterminator cancel netflix --orchestrate mcp
+User runs: subterminator cancel --service netflix
                 |
                 v
     +------------------------+
@@ -99,56 +87,23 @@ The CLI layer handles user interaction using the [Typer](https://typer.tiangolo.
 @app.command()
 def cancel(
     service: str | None = typer.Option(None, "--service", "-s"),
-    orchestrate: str = typer.Option("legacy", "--orchestrate"),  # "legacy" or "mcp"
-    dry_run: bool,
-    target: str,
+    dry_run: bool = typer.Option(False, "--dry-run", "-n"),
+    headless: bool = typer.Option(False, "--headless"),
+    verbose: bool = typer.Option(False, "--verbose", "-V"),
+    model: str | None = typer.Option(None, "--model"),
+    max_turns: int = typer.Option(20, "--max-turns"),
+    no_checkpoint: bool = typer.Option(False, "--no-checkpoint"),
     ...
 ) -> None:
 ```
 
 **Exit codes:**
-- `0`: Success
-- `1`: Failure
-- `2`: User aborted
-- `3`: Invalid arguments
-- `4`: Configuration error
-
----
-
-### Legacy Orchestrator (core/engine)
-
-**Location:** `src/subterminator/core/engine.py`
-
-The `CancellationEngine` coordinates the legacy state machine approach.
-
-#### Key Methods
-
-**`run(dry_run: bool) -> CancellationResult`** - Main entry point:
-
-```python
-async def run(self, dry_run: bool = False) -> CancellationResult:
-    while not self._is_terminal_state():
-        next_state = await self._handle_state(self._current_state)
-        self._transition_to(next_state)
-```
-
-**`_detect_state() -> State`** - Detection cascade:
-
-```python
-async def _detect_state(self) -> State:
-    # Try heuristic first (fast, free)
-    result = self.heuristic.interpret(url, text)
-    if result.confidence >= 0.7:
-        return result.state
-
-    # Fall back to AI (slower, costs money)
-    if self.ai:
-        ai_result = await self.ai.interpret(screenshot)
-        if ai_result.confidence >= 0.5:
-            return ai_result.state
-
-    return State.UNKNOWN
-```
+- `0`: Success (cancellation completed)
+- `1`: Failure (cancellation failed)
+- `2`: User cancelled (via Ctrl+C or menu)
+- `3`: Invalid service
+- `5`: MCP connection error
+- `130`: SIGINT during orchestration
 
 ---
 
@@ -295,46 +250,17 @@ class ServiceConfig:
 
 ---
 
-### State Machine
+### Core Utilities
 
-**Location:** `src/subterminator/core/states.py`
+**Location:** `src/subterminator/core/`
 
-Used by the legacy orchestrator. See [State Machine section](#state-machine) for details on the 12 states and transitions.
+Utility modules that support the MCP orchestrator:
 
-#### States
-
-| State | Type | Description |
-|-------|------|-------------|
-| `start` | Entry | Initial state |
-| `login_required` | Auth | Authentication needed |
-| `account_active` | Account | Active subscription |
-| `account_cancelled` | Account | Already cancelled |
-| `third_party_billing` | Account | Billed through Apple/Google |
-| `retention_offer` | Flow | Discount offer shown |
-| `exit_survey` | Flow | Survey page |
-| `final_confirmation` | Flow | Final button |
-| `complete` | Terminal | Success |
-| `aborted` | Terminal | User aborted |
-| `failed` | Terminal | Process failed |
-| `unknown` | Recovery | Unrecognized state |
-
----
-
-### Browser Automation
-
-**Location:** `src/subterminator/core/browser.py`
-
-`PlaywrightBrowser` wraps Playwright with stealth capabilities (used by legacy path).
-
----
-
-### AI Detection
-
-**Location:** `src/subterminator/core/ai.py`
-
-Two interpreters for the legacy path:
-- `HeuristicInterpreter` - URL/text pattern matching
-- `ClaudeInterpreter` - Vision-based detection
+| File | Responsibility |
+|------|----------------|
+| `protocols.py` | Shared types (State enum, protocols) |
+| `browser.py` | PlaywrightBrowser helper class |
+| `states.py` | State transition logic (reference) |
 
 ---
 
@@ -342,7 +268,7 @@ Two interpreters for the legacy path:
 
 **Location:** `src/subterminator/services/`
 
-Site-specific configuration for both orchestration paths.
+Site-specific configuration (registry and mock server for testing).
 
 ---
 
@@ -373,11 +299,11 @@ uv run ruff check --fix src/
 uv run mypy src/
 ```
 
-### Testing MCP Orchestrator
+### Testing
 
 ```bash
-# Requires ANTHROPIC_API_KEY or OPENAI_API_KEY
-uv run subterminator cancel --service netflix --orchestrate mcp --dry-run
+# Requires ANTHROPIC_API_KEY
+uv run subterminator cancel --service netflix --dry-run
 ```
 
 ---
@@ -385,8 +311,6 @@ uv run subterminator cancel --service netflix --orchestrate mcp --dry-run
 ## How-To Guides
 
 ### Adding a New Service
-
-**For MCP orchestrator:**
 
 1. Create service config in `src/subterminator/mcp_orchestrator/services/`:
 
@@ -414,13 +338,8 @@ myservice_config = ServiceConfig(
 
 3. Write tests in `tests/unit/mcp_orchestrator/`
 
-### Adding a New State
+### Debugging Issues
 
-(For legacy orchestrator - see original documentation)
-
-### Debugging Detection Issues
-
-**MCP orchestrator:**
 - Run with `--verbose` to see LLM reasoning
 - Check message history in logs
 - Verify snapshot parsing with unit tests
@@ -433,31 +352,23 @@ myservice_config = ServiceConfig(
 
 Testing uses local mock server with static HTML pages.
 
-### ADR-2: python-statemachine for Flow Control
-
-Legacy path uses explicit state machine for debugging clarity.
-
-### ADR-3: Typer for CLI Framework
+### ADR-2: Typer for CLI Framework
 
 Modern CLI with automatic --help and async support.
 
-### ADR-4: Heuristic Before AI Detection
-
-Legacy path tries fast heuristics before expensive AI calls.
-
-### ADR-5: Human Checkpoints for Safety
+### ADR-3: Human Checkpoints for Safety
 
 Mandatory human confirmation for auth and final cancellation.
 
-### ADR-6: Session Logging for Observability
+### ADR-4: Session Logging for Observability
 
 Full audit trail for debugging.
 
-### ADR-7: MCP Orchestration Pattern
+### ADR-5: MCP Orchestration Pattern
 
 **Context:** Subscription UIs change frequently, breaking hardcoded selectors.
 
-**Decision:** Add LLM-driven orchestration using Playwright MCP server. The LLM interprets page snapshots and decides actions, rather than following a fixed state machine.
+**Decision:** Use LLM-driven orchestration with Playwright MCP server. The LLM interprets page snapshots and decides actions dynamically.
 
 **Consequences:**
 - More resilient to UI changes
@@ -475,27 +386,23 @@ Full audit trail for debugging.
 | Component | Path |
 |-----------|------|
 | CLI entry | `src/subterminator/cli/main.py` |
-| Legacy engine | `src/subterminator/core/engine.py` |
-| MCP task runner | `src/subterminator/mcp_orchestrator/task_runner.py` |
-| MCP LLM client | `src/subterminator/mcp_orchestrator/llm_client.py` |
+| Task runner | `src/subterminator/mcp_orchestrator/task_runner.py` |
+| LLM client | `src/subterminator/mcp_orchestrator/llm_client.py` |
 | MCP server client | `src/subterminator/mcp_orchestrator/mcp_client.py` |
 | Checkpoint handler | `src/subterminator/mcp_orchestrator/checkpoint.py` |
 | Snapshot parser | `src/subterminator/mcp_orchestrator/snapshot.py` |
-| MCP types | `src/subterminator/mcp_orchestrator/types.py` |
-| MCP services | `src/subterminator/mcp_orchestrator/services/` |
-| Legacy state machine | `src/subterminator/core/states.py` |
-| Legacy browser | `src/subterminator/core/browser.py` |
-| Legacy AI detection | `src/subterminator/core/ai.py` |
-| Legacy services | `src/subterminator/services/` |
+| Types | `src/subterminator/mcp_orchestrator/types.py` |
+| Services | `src/subterminator/mcp_orchestrator/services/` |
+| Core utilities | `src/subterminator/core/` |
 | Config | `src/subterminator/utils/config.py` |
 
 ### Key Commands
 
 ```bash
 # Run CLI
-uv run subterminator cancel                                # Interactive
-uv run subterminator cancel --service netflix              # Legacy orchestrator
-uv run subterminator cancel --service netflix --orchestrate mcp  # MCP orchestrator
+uv run subterminator cancel                      # Interactive
+uv run subterminator cancel --service netflix    # Direct service
+uv run subterminator cancel --service netflix --dry-run  # Stop at final confirmation
 
 # Tests
 uv run pytest tests/unit/ -v
