@@ -587,7 +587,7 @@ BE ADAPTIVE: Don't assume specific elements exist. Look at what's actually on sc
 
             # Convert to RGB if necessary (JPEG doesn't support alpha)
             if img.mode in ("RGBA", "P"):
-                img = img.convert("RGB")
+                img = img.convert("RGB")  # type: ignore[assignment]
 
             # Start with original size and reduce until under limit
             quality = 85
@@ -698,7 +698,7 @@ What is the single best next action to take?"""
             prompt_text = f"{error_context}\n\n{prompt_text}"
 
         try:
-            response = self.client.messages.create(
+            response = self.client.messages.create(  # type: ignore[call-overload]
                 model="claude-sonnet-4-20250514",
                 max_tokens=1024,
                 system=self.AGENT_SYSTEM_PROMPT,
@@ -757,7 +757,7 @@ What is the single best next action to take?"""
         self,
         context: AgentContext,
         prompt_text: str,
-        response: anthropic.Message,
+        response: anthropic.types.Message,
         action_plan: ActionPlan,
     ) -> None:
         """Save debug artifacts for this AI turn.
@@ -988,7 +988,7 @@ What is the single best next action to take?"""
                 model="claude-sonnet-4-20250514",
                 max_tokens=1024,
                 system=self.SYSTEM_PROMPT,
-                tools=self.TOOLS,
+                tools=self.TOOLS,  # type: ignore[arg-type]
                 messages=[
                     {
                         "role": "user",

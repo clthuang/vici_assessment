@@ -484,7 +484,7 @@ class PlaywrightBrowser:
         """
         if not self._page:
             raise RuntimeError("Browser not launched")
-        snapshot = await self._page.accessibility.snapshot()
+        snapshot = await self._page.accessibility.snapshot()  # type: ignore[attr-defined]
         return snapshot or {"role": "WebArea", "name": "", "children": []}
 
     async def get_element(self, selector: str) -> BrowserElement | None:
@@ -684,7 +684,7 @@ class PlaywrightBrowser:
             raise RuntimeError("Browser not launched")
 
         try:
-            snapshot = await self._page.accessibility.snapshot()
+            snapshot = await self._page.accessibility.snapshot()  # type: ignore[attr-defined]
             if snapshot is None:
                 return "{}"
             pruned = self._prune_a11y_tree(snapshot, max_depth=5)

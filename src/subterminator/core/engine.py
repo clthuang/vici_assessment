@@ -173,7 +173,7 @@ class CancellationEngine:
 
         # Create and run agent
         agent = AIBrowserAgent(
-            browser=self.browser,
+            browser=self.browser,  # type: ignore[arg-type]
             planner=planner,
             heuristic=self.heuristic,
             service=self.service,
@@ -295,14 +295,14 @@ class CancellationEngine:
 
         # Clear action history on first AI-driven call
         if not self._action_history_cleared:
-            self.agent.clear_history()
+            self.agent.clear_history()  # type: ignore[union-attr]
             self._action_history_cleared = True
 
         # Use agentic loop with flexible goal based on current state
         goal = self._get_agentic_goal(state)
 
         try:
-            result = await self.agent.run_agentic_loop(goal=goal, max_actions=10)
+            result = await self.agent.run_agentic_loop(goal=goal, max_actions=10)  # type: ignore[union-attr]
             return result.state
         except (anthropic.APIStatusError, anthropic.APIConnectionError) as e:
             # AI-first: no fallback to hardcoded, just fail gracefully

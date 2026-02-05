@@ -121,9 +121,9 @@ class LLMClient:
                 "ANTHROPIC_API_KEY environment variable not set."
             )
 
-        return ChatAnthropic(
+        return ChatAnthropic(  # type: ignore[call-arg]
             model=self._model_name,
-            api_key=api_key,
+            api_key=api_key,  # type: ignore[arg-type]
         )
 
     def _create_openai_model(self) -> BaseChatModel:
@@ -151,10 +151,10 @@ class LLMClient:
 
         return ChatOpenAI(
             model=self._model_name,
-            api_key=api_key,
+            api_key=api_key,  # type: ignore[arg-type]
         )
 
-    def _convert_messages(self, messages: list[dict[str, Any]]) -> list:
+    def _convert_messages(self, messages: list[dict[str, Any]]) -> list[Any]:
         """Convert dict messages to LangChain message objects.
 
         Args:
@@ -170,7 +170,7 @@ class LLMClient:
             ToolMessage,
         )
 
-        result = []
+        result: list[Any] = []
         for msg in messages:
             role = msg.get("role", "")
             content = msg.get("content", "")

@@ -572,7 +572,7 @@ class TaskRunner:
 
         return False
 
-    def _handle_sigint(self, signum, frame):
+    def _handle_sigint(self, signum: int, frame: object) -> None:
         """Handle SIGINT (Ctrl+C)."""
         logger.info("SIGINT received, requesting shutdown...")
         self._shutdown_requested = True
