@@ -6,21 +6,18 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 This is a VICI Claude Code 7-Day Challenge assessment project. The goal is to demonstrate engineering design thinking, code quality, and AI tool integration.
 
-## Challenge Options
-
-Choose one task to implement:
-
-- **Easy**: US Stock Backtesting System (美股回測系統)
-- **Medium**: Wrap Claude CLI as a LiteLLM endpoint, or wrap GitHub CI/CD as Claude Skills
-- **Hard**: Browser automation tasks (e.g., Taiwan High Speed Rail ticket booking, NotebookLM presentation generation)
-
 ## Project Structure
 
 ```
+.github/workflows/      # CI/CD (lint, test, build, auto-PR)
 subterminator/           # SubTerminator CLI project
   src/subterminator/     # Source code
-  tests/                 # Test suite
-  docs/                  # Documentation & PRDs
+    cli/                 # CLI layer (Typer)
+    mcp_orchestrator/    # AI orchestration engine
+    services/            # Service registry & configs
+    utils/               # Configuration & logging
+  tests/                 # Test suite (unit + integration)
+  docs/                  # Architecture, features, PRDs
   pyproject.toml         # Project config
 ```
 
