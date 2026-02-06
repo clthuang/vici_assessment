@@ -1,5 +1,6 @@
 """Tests for MCP orchestrator types."""
 
+import pytest
 
 from subterminator.mcp_orchestrator.types import (
     CheckpointPredicate,

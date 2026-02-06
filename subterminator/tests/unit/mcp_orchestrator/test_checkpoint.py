@@ -93,7 +93,7 @@ class TestShouldCheckpoint:
         assert handler.should_checkpoint(tool, snap, config) is False
 
     def test_auth_edge_case_handled_separately(self, handler):
-        """Auth edge cases are NOT handled via should_checkpoint."""
+        """Auth edge cases are NOT handled via should_checkpoint (handled separately)."""
         snap = NormalizedSnapshot(
             url="https://example.com/login",
             title="Sign In",
@@ -110,7 +110,7 @@ class TestShouldCheckpoint:
             goal_template="g",
             auth_edge_case_detectors=[is_login],
         )
-        # Auth edge cases handled via detect_auth_edge_case()
+        # Auth edge cases are now handled via detect_auth_edge_case(), not should_checkpoint()
         assert handler.should_checkpoint(tool, snap, config) is False
 
     def test_handles_predicate_exception(self, handler, snap, tool):

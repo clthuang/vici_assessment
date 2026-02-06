@@ -1,9 +1,5 @@
 # SubTerminator Architecture
 
-> **SubTerminator** is a CLI tool that uses AI-driven MCP (Model Context Protocol) orchestration to automate subscription cancellations via browser automation.
->
-> **Tech stack:** Python 3.12 | Typer + Rich | LangChain (Anthropic/OpenAI) | Playwright MCP | Chromium
-
 This document provides system design diagrams and component descriptions for the SubTerminator codebase.
 
 ---
@@ -16,40 +12,19 @@ This document provides system design diagrams and component descriptions for the
 <summary>Mermaid source</summary>
 
 ```mermaid
-%%{init: {'theme': 'base', 'themeVariables': {'fontFamily': 'Trebuchet MS, Verdana, Arial, Sans-Serif', 'fontSize': '14px'}, 'flowchart': {'curve': 'linear', 'nodeSpacing': 30, 'rankSpacing': 40}}}%%
 flowchart TB
-    subgraph Entry["Entry Points"]
-        dunder["__main__.py<br/>python -m subterminator"]
-        main["cli/main.py<br/>Command Parser (Typer)"]
-    end
-
     subgraph CLI["CLI Layer"]
-        output["cli/output.py<br/>OutputFormatter"]
-        prompts["cli/prompts.py<br/>User Input (questionary)"]
-        access["cli/accessibility.py<br/>NO_COLOR / plain mode"]
+        main["main.py<br/>Command Parser"]
+        output["output.py<br/>Formatter"]
+        prompts["prompts.py<br/>User Input"]
     end
 
-    subgraph TopServices["services/ — Service Info"]
-        sreg["services/registry.py<br/>ServiceInfo registry"]
-        snetflix["services/netflix.py<br/>NetflixService (selectors)"]
-        smock["services/mock.py<br/>MockServer (local test)"]
-        sselect["services/selectors.py<br/>SelectorConfig"]
-    end
-
-    subgraph MCP["mcp_orchestrator/ — Orchestration Engine"]
-        runner["task_runner.py<br/>TaskRunner + VIRTUAL_TOOLS"]
-        llm["llm_client.py<br/>LLMClient (LangChain)"]
-        mcpc["mcp_client.py<br/>MCPClient (stdio)"]
-        checkpoint["checkpoint.py<br/>CheckpointHandler"]
-        snapshot["snapshot.py<br/>normalize_snapshot()"]
-        types["types.py<br/>TaskResult, ToolCall, …"]
-        excepts["exceptions.py<br/>Error hierarchy"]
-    end
-
-    subgraph MCPServices["mcp_orchestrator/services/ — MCP Configs"]
-        mbase["services/base.py<br/>ServiceConfig dataclass"]
-        mreg["services/registry.py<br/>ServiceRegistry"]
-        mnetflix["services/netflix.py<br/>Predicates + prompts"]
+    subgraph MCP["MCP Orchestrator"]
+        runner["TaskRunner<br/>Main Loop"]
+        llm["LLMClient<br/>Claude/GPT-4"]
+        mcpc["MCPClient<br/>Server Connection"]
+        checkpoint["CheckpointHandler<br/>Human Gates"]
+        snapshot["SnapshotParser<br/>Page State"]
     end
 
     subgraph External["External Services"]
@@ -59,36 +34,23 @@ flowchart TB
         chromium["Chromium Browser"]
     end
 
-    dunder --> main
-    main --> prompts
-    main --> sreg
+    subgraph Services["Service Configs"]
+        netflix["Netflix Config"]
+        others["Other Services..."]
+    end
+
     main --> runner
 
     runner --> llm
     runner --> mcpc
     runner --> checkpoint
     runner --> snapshot
-    runner --> mreg
-    mreg --> mnetflix
 
-    llm -->|LangChain ChatAnthropic| anthropic
-    llm -->|LangChain ChatOpenAI| openai
-    mcpc -->|stdio transport| mcpserver
+    llm --> anthropic
+    llm --> openai
+    mcpc --> mcpserver
     mcpserver --> chromium
-
-    classDef entry fill:#E8F4FD,stroke:#4A90E2,stroke-width:2px,color:#1a3a5c
-    classDef cli fill:#E8F4FD,stroke:#4A90E2,stroke-width:1px,color:#1a3a5c
-    classDef services fill:#FFF3CD,stroke:#856404,stroke-width:1px,color:#533608
-    classDef mcp fill:#D4EDDA,stroke:#28a745,stroke-width:2px,color:#155724
-    classDef mcpservices fill:#E2F0D9,stroke:#548235,stroke-width:1px,color:#2d4a1a
-    classDef external fill:#F8D7DA,stroke:#dc3545,stroke-width:1px,color:#721c24
-
-    class dunder,main entry
-    class output,prompts,access cli
-    class sreg,snetflix,smock,sselect services
-    class runner,llm,mcpc,checkpoint,snapshot,types,excepts mcp
-    class mbase,mreg,mnetflix mcpservices
-    class anthropic,openai,mcpserver,chromium external
+    runner --> netflix
 ```
 
 </details>
@@ -103,7 +65,6 @@ flowchart TB
 <summary>Mermaid source</summary>
 
 ```mermaid
-%%{init: {'theme': 'base', 'themeVariables': {'fontFamily': 'Trebuchet MS, Verdana, Arial, Sans-Serif', 'fontSize': '14px'}, 'flowchart': {'curve': 'linear', 'nodeSpacing': 30, 'rankSpacing': 40}}}%%
 flowchart TD
     Start([Start]) --> Connect["Connect to MCP Server"]
     Connect --> Navigate["Navigate to Initial URL"]
@@ -157,18 +118,6 @@ flowchart TD
     TurnCheck -->|No| MaxTurns([Fail: Max turns])
     TurnCheck -->|Yes| UpdateSnapshot["Update snapshot<br/>(if navigation tool)"]
     UpdateSnapshot --> LLM
-
-    classDef startEnd fill:#E8F4FD,stroke:#4A90E2,stroke-width:2px,color:#1a3a5c
-    classDef process fill:#D4EDDA,stroke:#28a745,stroke-width:1px,color:#155724
-    classDef decision fill:#FFF3CD,stroke:#856404,stroke-width:2px,color:#533608
-    classDef success fill:#D4EDDA,stroke:#28a745,stroke-width:2px,color:#155724
-    classDef failure fill:#F8D7DA,stroke:#dc3545,stroke-width:2px,color:#721c24
-
-    class Start startEnd
-    class Connect,Navigate,Snapshot,LLM,NoActionCount,PromptLLM,Verify,RetryVerify,HumanApproval,ContinueApproval,AuthCheck,WaitAuth,RefreshSnapshot,CheckpointCheck,RequestApproval,Execute,UpdateMessages,UpdateSnapshot process
-    class ToolCheck,MaxNoAction,VirtualCheck,VerifyOK,Approved,IsAuth,AuthDone,NeedsCheckpoint,ApprovedCP,TurnCheck decision
-    class Success success
-    class FailNoAction,Rejected,MaxTurns failure
 ```
 
 </details>
@@ -177,91 +126,52 @@ flowchart TD
 
 ## Component Descriptions
 
-### Entry Points
+### CLI Layer
 
 | Component | File | Responsibility |
 |-----------|------|----------------|
-| Module Entry | `subterminator/__main__.py` | Enables `python -m subterminator` invocation |
-| CLI App | `subterminator/cli/main.py` | Typer app: `cancel` command, option parsing, orchestration bootstrap |
+| Command Parser | `cli/main.py` | Parse CLI arguments, create components, run orchestrator |
+| Output Formatter | `cli/output.py` | Format progress messages, success/failure output |
+| User Prompts | `cli/prompts.py` | Interactive service selection, confirmation dialogs |
+| Accessibility | `cli/accessibility.py` | Plain mode, non-interactive mode support |
 
-### CLI Layer (`subterminator/cli/`)
-
-| Component | File | Responsibility |
-|-----------|------|----------------|
-| Command Parser | `cli/main.py` | Parse CLI arguments via Typer, create components, run orchestrator |
-| Output Formatter | `cli/output.py` | Format progress messages, warning output |
-| User Prompts | `cli/prompts.py` | Interactive service selection via questionary, TTY detection |
-| Accessibility | `cli/accessibility.py` | NO_COLOR standard, plain mode, animation suppression |
-
-### CLI Options (`subterminator cancel`)
-
-| Flag | Short | Default | Description |
-|------|-------|---------|-------------|
-| `--dry-run` | `-n` | `False` | Run without making changes (stops at first action) |
-| `--headless` | | `False` | Run browser in headless mode |
-| `--verbose` | `-V` | `False` | Show detailed progress information |
-| `--service` | `-s` | (interactive) | Service to cancel (bypasses interactive menu) |
-| `--no-input` | | `False` | Disable all interactive prompts |
-| `--plain` | | `False` | Disable colors and animations |
-| `--profile-dir` | | auto-detect | Persistent browser profile directory |
-| `--model` | | `claude-opus-4-6` | LLM model override |
-| `--max-turns` | | `20` | Maximum orchestration turns |
-| `--no-checkpoint` | | `False` | Disable human checkpoints |
-| `--version` | `-v` | | Show version and exit |
-
-### Exit Codes
-
-| Code | Meaning |
-|------|---------|
-| `0` | Success — cancellation completed |
-| `1` | Failure — cancellation failed |
-| `2` | User cancelled (Ctrl+C or menu) / configuration error |
-| `3` | Invalid or unavailable service |
-| `5` | MCP connection error |
-| `130` | SIGINT during orchestration |
-
----
-
-### MCP Orchestrator (`subterminator/mcp_orchestrator/`)
+### MCP Orchestrator (mcp_orchestrator/)
 
 | Component | File | Responsibility |
 |-----------|------|----------------|
-| TaskRunner | `mcp_orchestrator/task_runner.py` | Main orchestration loop, virtual tool dispatch, turn management, SIGINT handling |
-| LLMClient | `mcp_orchestrator/llm_client.py` | LangChain-based LLM abstraction; auto-detects Anthropic (`claude-*`) or OpenAI (`gpt-*`) by model name prefix; default model: `claude-opus-4-6`; retries with exponential backoff (1s, 2s, 4s); 60s timeout |
-| MCPClient | `mcp_orchestrator/mcp_client.py` | Playwright MCP server subprocess via stdio transport; validates Node.js >= 18; tool caching; auto-reconnect support |
-| CheckpointHandler | `mcp_orchestrator/checkpoint.py` | Auth edge-case detection (login/captcha/mfa), checkpoint predicate evaluation, screenshot capture, approval UI |
-| SnapshotParser | `mcp_orchestrator/snapshot.py` | Parse `browser_snapshot` markdown output into `NormalizedSnapshot` (url, title, content) |
-| Types | `mcp_orchestrator/types.py` | `TaskResult`, `ToolCall`, `NormalizedSnapshot`, `TaskReason` literal, predicate type aliases |
-| Exceptions | `mcp_orchestrator/exceptions.py` | `OrchestratorError` hierarchy: `MCPConnectionError`, `MCPToolError`, `LLMError`, `CheckpointRejectedError`, `SnapshotValidationError`, `ServiceNotFoundError` |
+| TaskRunner | `task_runner.py` | Main loop, virtual tools, turn management |
+| LLMClient | `llm_client.py` | Claude/GPT-4 via LangChain, retries |
+| MCPClient | `mcp_client.py` | Playwright MCP server subprocess |
+| CheckpointHandler | `checkpoint.py` | Auth detection, approval UI |
+| SnapshotParser | `snapshot.py` | Parse browser_snapshot to structured data |
+| Types | `types.py` | TaskResult, ToolCall, NormalizedSnapshot |
+| Exceptions | `exceptions.py` | Custom error types |
+| ServiceConfig | `services/base.py` | Service configuration dataclass |
+| ServiceRegistry | `services/registry.py` | Service lookup by name |
 
-### MCP Service Configs (`subterminator/mcp_orchestrator/services/`)
-
-These are predicate-based service configurations used by the orchestration engine. Each service defines checkpoint conditions, success/failure indicators, auth detectors, and system prompt additions.
-
-| Component | File | Responsibility |
-|-----------|------|----------------|
-| ServiceConfig | `mcp_orchestrator/services/base.py` | Dataclass: `name`, `initial_url`, `goal_template`, predicate lists (`checkpoint_conditions`, `success_indicators`, `failure_indicators`, `auth_edge_case_detectors`), `system_prompt_addition` |
-| ServiceRegistry | `mcp_orchestrator/services/registry.py` | Register/lookup `ServiceConfig` by name; `default_registry` global instance |
-| Netflix (MCP) | `mcp_orchestrator/services/netflix.py` | Netflix predicates: `is_payment_page` checkpoint, 5 success indicators, 4 failure indicators, 3 auth detectors; LLM system prompt with termination rules |
-
-### Services — Service Info (`subterminator/services/`)
-
-Top-level service registry for CLI presentation (service listing, availability, fuzzy matching). Separate from MCP orchestrator service configs.
+### Services
 
 | Component | File | Responsibility |
 |-----------|------|----------------|
-| ServiceInfo Registry | `services/registry.py` | `ServiceInfo` dataclass (`id`, `name`, `description`, `available`); `SERVICE_REGISTRY` list; `get_available_services()`, `get_service_by_id()`, `suggest_service()` (fuzzy match) |
-| Netflix (Info) | `services/netflix.py` | `NetflixService` class with CSS/ARIA selectors, text indicators, entry URLs (live + mock) |
-| Mock Server | `services/mock.py` | `MockServer` — local HTTP server serving test Netflix HTML pages with variant routing |
-| Selectors | `services/selectors.py` | `SelectorConfig` dataclass — CSS selector list with optional ARIA `(role, name)` fallback |
+| Netflix | `mcp_orchestrator/services/netflix.py` | URLs, predicates, LLM hints |
+| Service Registry | `services/registry.py` | Service lookup, validation |
+| Mock Server | `services/mock.py` | Local testing server |
 
-### Utilities (`subterminator/utils/`)
+### Core Utilities
 
 | Component | File | Responsibility |
 |-----------|------|----------------|
-| Config | `utils/config.py` | `AppConfig` dataclass, `ConfigLoader` — env var handling with dotenv |
-| Exceptions | `utils/exceptions.py` | Root exception hierarchy: `SubTerminatorError` -> `TransientError` / `PermanentError` -> `ConfigurationError`, `ServiceError`, `HumanInterventionRequired`, etc. |
-| Session Logger | `utils/session.py` | `SessionLogger` — JSON session log with state transitions, AI calls, screenshots |
+| Protocols | `core/protocols.py` | Shared types (State enum) |
+| Browser | `core/browser.py` | PlaywrightBrowser helper |
+| States | `core/states.py` | State transition logic (reference) |
+
+### Utilities
+
+| Component | File | Responsibility |
+|-----------|------|----------------|
+| Config | `utils/config.py` | Environment variable handling |
+| Exceptions | `utils/exceptions.py` | Shared exception types |
+| Session Logger | `utils/session.py` | Screenshot and log capture |
 
 ---
 
@@ -275,7 +185,6 @@ Top-level service registry for CLI presentation (service listing, availability, 
 <summary>Mermaid source</summary>
 
 ```mermaid
-%%{init: {'theme': 'base', 'themeVariables': {'fontFamily': 'Trebuchet MS, Verdana, Arial, Sans-Serif', 'fontSize': '14px'}}}%%
 classDiagram
     class TaskResult {
         +bool success
@@ -303,10 +212,10 @@ classDiagram
         +str name
         +str initial_url
         +str goal_template
-        +list~CheckpointPredicate~ checkpoint_conditions
-        +list~SnapshotPredicate~ success_indicators
-        +list~SnapshotPredicate~ failure_indicators
-        +list~SnapshotPredicate~ auth_edge_case_detectors
+        +list checkpoint_conditions
+        +list success_indicators
+        +list failure_indicators
+        +list auth_edge_case_detectors
         +str system_prompt_addition
     }
 
@@ -322,12 +231,6 @@ classDiagram
         mcp_error
         verification_failed
     }
-
-    style TaskResult fill:#D4EDDA,stroke:#28a745,stroke-width:1px,color:#155724
-    style ToolCall fill:#D4EDDA,stroke:#28a745,stroke-width:1px,color:#155724
-    style NormalizedSnapshot fill:#D4EDDA,stroke:#28a745,stroke-width:1px,color:#155724
-    style ServiceConfig fill:#D4EDDA,stroke:#28a745,stroke-width:1px,color:#155724
-    style TaskReason fill:#FFF3CD,stroke:#856404,stroke-width:1px,color:#533608
 ```
 
 </details>
@@ -342,7 +245,6 @@ classDiagram
 <summary>Mermaid source</summary>
 
 ```mermaid
-%%{init: {'theme': 'base', 'themeVariables': {'fontFamily': 'Trebuchet MS, Verdana, Arial, Sans-Serif', 'fontSize': '14px'}, 'sequence': {'mirrorActors': false, 'actorMargin': 40}}}%%
 sequenceDiagram
     participant LLM
     participant TaskRunner
@@ -391,24 +293,22 @@ sequenceDiagram
 
 ## Tool Execution
 
-### Available MCP Tools (from Playwright MCP)
+### Available MCP Tools
 
 | Tool | Description |
 |------|-------------|
 | `browser_navigate` | Navigate to URL |
 | `browser_click` | Click element by ref |
 | `browser_type` | Type into input field |
-| `browser_snapshot` | Get page accessibility tree (markdown format) |
-| `browser_take_screenshot` | Capture screenshot (base64 PNG) |
+| `browser_snapshot` | Get page accessibility tree |
+| `browser_take_screenshot` | Capture screenshot |
 
 ### Virtual Tools
 
-Defined in `mcp_orchestrator/task_runner.py:VIRTUAL_TOOLS`. These are intercepted by `TaskRunner` and never reach the MCP server.
-
-| Tool | Parameters | Description |
-|------|-----------|-------------|
-| `complete_task` | `status` (required): `"success"` or `"failed"`; `reason` (required): explanation | Signal task completion or failure. On `"success"`, triggers verification via success/failure indicator predicates. |
-| `request_human_approval` | `action` (required): description of action; `reason` (required): why approval is needed | Request explicit human approval before proceeding. Used for irreversible actions or when the LLM is unsure. |
+| Tool | Description |
+|------|-------------|
+| `complete_task` | Signal success or failure |
+| `request_human_approval` | Request explicit approval |
 
 ---
 
@@ -420,7 +320,6 @@ Defined in `mcp_orchestrator/task_runner.py:VIRTUAL_TOOLS`. These are intercepte
 <summary>Mermaid source</summary>
 
 ```mermaid
-%%{init: {'theme': 'base', 'themeVariables': {'fontFamily': 'Trebuchet MS, Verdana, Arial, Sans-Serif', 'fontSize': '14px'}, 'sequence': {'mirrorActors': false, 'actorMargin': 40}}}%%
 sequenceDiagram
     participant System as System Prompt
     participant User as User Messages
@@ -444,27 +343,20 @@ sequenceDiagram
 </details>
 
 The message history accumulates:
-1. System prompt with goal + service-specific instructions
+1. System prompt with goal
 2. User message with page snapshot
 3. Assistant tool_call
 4. Tool result
-5. (If `browser_navigate`/`browser_click`/`browser_type`) User message with updated snapshot
-6. Repeat until `complete_task`
+5. (If navigation) User message with updated snapshot
+6. Repeat until complete_task
 
 ---
 
 ## Image Regeneration
 
-The PNG images in `docs/images/` can be regenerated from the Mermaid source blocks in this document using `mermaid-cli` or the `mcp__mermaid__generate_mermaid_diagram` MCP tool:
+The `images/architecture-high-level.png` needs regeneration to match the updated mermaid diagram. Use mermaid-cli if available:
 
 ```bash
 # If mmdc is installed
 mmdc -i architecture.md -o images/architecture-high-level.png -w 800
 ```
-
-Target files:
-- `images/architecture-high-level.png`
-- `images/mcp-orchestrator-flow.png`
-- `images/data-types.png`
-- `images/checkpoint-flow.png`
-- `images/message-flow.png`

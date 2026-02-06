@@ -378,7 +378,7 @@ DISCONNECTED --connect()--> CONNECTED --close()--> DISCONNECTED
 **Model Resolution (Priority Order)**:
 1. Explicit `model_name` parameter (from CLI `--model`)
 2. `SUBTERMINATOR_MODEL` environment variable
-3. Default: `"claude-opus-4-6"`
+3. Default: `"claude-sonnet-4-20250514"`
 
 **Provider Detection**:
 - Model name starts with "claude" → Anthropic
@@ -696,7 +696,7 @@ import os
 from langchain_core.language_models import BaseChatModel
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage, ToolMessage
 
-DEFAULT_MODEL = "claude-opus-4-6"
+DEFAULT_MODEL = "claude-sonnet-4-20250514"
 
 class LLMClient:
     """Provider-agnostic LLM client"""

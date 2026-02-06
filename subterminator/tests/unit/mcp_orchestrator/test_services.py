@@ -74,12 +74,8 @@ class TestServiceRegistry:
     def test_get_unknown_shows_available(self):
         """Error message shows available services."""
         registry = ServiceRegistry()
-        registry.register(ServiceConfig(
-            name="svc1", initial_url="u", goal_template="g",
-        ))
-        registry.register(ServiceConfig(
-            name="svc2", initial_url="u", goal_template="g",
-        ))
+        registry.register(ServiceConfig(name="svc1", initial_url="u", goal_template="g"))
+        registry.register(ServiceConfig(name="svc2", initial_url="u", goal_template="g"))
 
         with pytest.raises(ServiceNotFoundError) as exc_info:
             registry.get("unknown")
@@ -89,12 +85,8 @@ class TestServiceRegistry:
     def test_list_services(self):
         """list_services() returns sorted service names."""
         registry = ServiceRegistry()
-        registry.register(ServiceConfig(
-            name="zebra", initial_url="u", goal_template="g",
-        ))
-        registry.register(ServiceConfig(
-            name="alpha", initial_url="u", goal_template="g",
-        ))
+        registry.register(ServiceConfig(name="zebra", initial_url="u", goal_template="g"))
+        registry.register(ServiceConfig(name="alpha", initial_url="u", goal_template="g"))
 
         result = registry.list_services()
         assert result == ["alpha", "zebra"]
@@ -112,6 +104,7 @@ class TestNetflixConfig:
     def netflix_config(self):
         """Get Netflix config from default registry."""
         # Import here to trigger registration
+        from subterminator.mcp_orchestrator.services import netflix
         from subterminator.mcp_orchestrator.services.registry import default_registry
         return default_registry.get("netflix")
 
@@ -121,7 +114,7 @@ class TestNetflixConfig:
         assert "netflix.com" in netflix_config.initial_url
 
     def test_netflix_has_checkpoint_conditions(self, netflix_config):
-        """Netflix config has checkpoint conditions."""
+        """Netflix config has checkpoint conditions (minimal for low-risk cancel flow)."""
         # Only payment page protection - cancel is reversible so minimal checkpoints
         assert len(netflix_config.checkpoint_conditions) >= 1
 
@@ -153,13 +146,8 @@ class TestNetflixCheckpointPredicates:
 
     def test_destructive_click_triggers(self, predicates):
         """is_destructive_click triggers on finality keywords."""
-        tool = ToolCall(
-            id="1", name="browser_click",
-            args={"element": "Finish Cancellation"},
-        )
-        snap = NormalizedSnapshot(
-            url="/cancel", title="Cancel", content="page content",
-        )
+        tool = ToolCall(id="1", name="browser_click", args={"element": "Finish Cancellation"})
+        snap = NormalizedSnapshot(url="/cancel", title="Cancel", content="page content")
         assert predicates["destructive"](tool, snap) is True
 
     def test_destructive_click_ignores_non_click(self, predicates):
@@ -194,18 +182,13 @@ class TestNetflixCheckpointPredicates:
     def test_payment_page_triggers_on_url(self, predicates):
         """is_payment_page triggers on payment in URL."""
         tool = ToolCall(id="1", name="browser_click", args={})
-        snap = NormalizedSnapshot(
-            url="/payment-method", title="Payment", content="card",
-        )
+        snap = NormalizedSnapshot(url="/payment-method", title="Payment", content="card")
         assert predicates["payment"](tool, snap) is True
 
     def test_payment_page_triggers_on_content(self, predicates):
         """is_payment_page triggers on billing in content."""
         tool = ToolCall(id="1", name="browser_click", args={})
-        snap = NormalizedSnapshot(
-            url="/settings", title="Settings",
-            content="billing info",
-        )
+        snap = NormalizedSnapshot(url="/settings", title="Settings", content="billing info")
         assert predicates["payment"](tool, snap) is True
 
 
@@ -282,8 +265,8 @@ class TestNetflixFailureIndicators:
         """Get Netflix failure indicators."""
         from subterminator.mcp_orchestrator.services.netflix import (
             has_error_message,
-            has_session_expired,
             has_try_again,
+            has_session_expired,
         )
         return {
             "error": has_error_message,
@@ -326,8 +309,8 @@ class TestNetflixAuthEdgeCases:
     def detectors(self):
         """Get Netflix auth edge case detectors."""
         from subterminator.mcp_orchestrator.services.netflix import (
-            is_captcha_page,
             is_login_page,
+            is_captcha_page,
             is_mfa_page,
         )
         return {

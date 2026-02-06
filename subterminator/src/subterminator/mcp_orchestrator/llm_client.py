@@ -20,7 +20,7 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 # Default model to use
-DEFAULT_MODEL = "claude-opus-4-6"
+DEFAULT_MODEL = "claude-sonnet-4-20250514"
 
 # LLM timeout in seconds
 LLM_TIMEOUT = 60
@@ -46,7 +46,7 @@ class LLMClient:
 
         Args:
             model_name: Model to use. If None, checks SUBTERMINATOR_MODEL env var,
-                       then falls back to default (claude-opus-4-6).
+                       then falls back to default (claude-sonnet-4-20250514).
 
         Raises:
             ConfigurationError: If API key is missing or model unsupported.

@@ -53,14 +53,8 @@ class TestMCPClientConnect:
     @pytest.fixture
     def client(self):
         """Create a client with mocked Node.js check."""
-        patch_target = (
-            "subterminator.mcp_orchestrator.mcp_client"
-            ".subprocess.run"
-        )
-        with patch(patch_target) as mock_run:
-            mock_run.return_value = MagicMock(
-                returncode=0, stdout="v20.0.0"
-            )
+        with patch("subterminator.mcp_orchestrator.mcp_client.subprocess.run") as mock_run:
+            mock_run.return_value = MagicMock(returncode=0, stdout="v20.0.0")
             yield MCPClient()
 
     @pytest.mark.asyncio
@@ -87,14 +81,8 @@ class TestMCPClientListTools:
     @pytest.fixture
     def client(self):
         """Create a client with mocked Node.js check."""
-        patch_target = (
-            "subterminator.mcp_orchestrator.mcp_client"
-            ".subprocess.run"
-        )
-        with patch(patch_target) as mock_run:
-            mock_run.return_value = MagicMock(
-                returncode=0, stdout="v20.0.0"
-            )
+        with patch("subterminator.mcp_orchestrator.mcp_client.subprocess.run") as mock_run:
+            mock_run.return_value = MagicMock(returncode=0, stdout="v20.0.0")
             yield MCPClient()
 
     @pytest.mark.asyncio
@@ -123,14 +111,8 @@ class TestMCPClientCallTool:
     @pytest.fixture
     def client(self):
         """Create a client with mocked Node.js check."""
-        patch_target = (
-            "subterminator.mcp_orchestrator.mcp_client"
-            ".subprocess.run"
-        )
-        with patch(patch_target) as mock_run:
-            mock_run.return_value = MagicMock(
-                returncode=0, stdout="v20.0.0"
-            )
+        with patch("subterminator.mcp_orchestrator.mcp_client.subprocess.run") as mock_run:
+            mock_run.return_value = MagicMock(returncode=0, stdout="v20.0.0")
             yield MCPClient()
 
     @pytest.mark.asyncio
@@ -174,14 +156,8 @@ class TestMCPClientClose:
     @pytest.fixture
     def client(self):
         """Create a client with mocked Node.js check."""
-        patch_target = (
-            "subterminator.mcp_orchestrator.mcp_client"
-            ".subprocess.run"
-        )
-        with patch(patch_target) as mock_run:
-            mock_run.return_value = MagicMock(
-                returncode=0, stdout="v20.0.0"
-            )
+        with patch("subterminator.mcp_orchestrator.mcp_client.subprocess.run") as mock_run:
+            mock_run.return_value = MagicMock(returncode=0, stdout="v20.0.0")
             yield MCPClient()
 
     @pytest.mark.asyncio
@@ -211,14 +187,8 @@ class TestMCPClientContextManager:
     @pytest.fixture
     def client(self):
         """Create a client with mocked Node.js check."""
-        patch_target = (
-            "subterminator.mcp_orchestrator.mcp_client"
-            ".subprocess.run"
-        )
-        with patch(patch_target) as mock_run:
-            mock_run.return_value = MagicMock(
-                returncode=0, stdout="v20.0.0"
-            )
+        with patch("subterminator.mcp_orchestrator.mcp_client.subprocess.run") as mock_run:
+            mock_run.return_value = MagicMock(returncode=0, stdout="v20.0.0")
             yield MCPClient()
 
     @pytest.mark.asyncio
@@ -252,14 +222,8 @@ class TestMCPClientReconnect:
     @pytest.fixture
     def client(self):
         """Create a client with mocked Node.js check."""
-        patch_target = (
-            "subterminator.mcp_orchestrator.mcp_client"
-            ".subprocess.run"
-        )
-        with patch(patch_target) as mock_run:
-            mock_run.return_value = MagicMock(
-                returncode=0, stdout="v20.0.0"
-            )
+        with patch("subterminator.mcp_orchestrator.mcp_client.subprocess.run") as mock_run:
+            mock_run.return_value = MagicMock(returncode=0, stdout="v20.0.0")
             yield MCPClient()
 
     @pytest.mark.asyncio

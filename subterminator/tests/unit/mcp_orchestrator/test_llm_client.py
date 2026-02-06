@@ -1,13 +1,15 @@
 """Tests for LLM client."""
 
-import sys
+import asyncio
 from unittest.mock import AsyncMock, MagicMock, patch
+import sys
 
 import pytest
 
 from subterminator.mcp_orchestrator.exceptions import ConfigurationError, LLMError
 from subterminator.mcp_orchestrator.llm_client import (
     DEFAULT_MODEL,
+    LLM_TIMEOUT,
     LLMClient,
 )
 
@@ -63,7 +65,7 @@ class TestLLMClientCreateModel:
         mock_anthropic_module.ChatAnthropic = mock_chat_class
 
         with patch.dict(sys.modules, {"langchain_anthropic": mock_anthropic_module}):
-            LLMClient(model_name="claude-3-opus")
+            client = LLMClient(model_name="claude-3-opus")
             mock_chat_class.assert_called_once()
 
     @patch.dict("os.environ", {"OPENAI_API_KEY": "test-key"})
@@ -74,7 +76,7 @@ class TestLLMClientCreateModel:
         mock_openai_module.ChatOpenAI = mock_chat_class
 
         with patch.dict(sys.modules, {"langchain_openai": mock_openai_module}):
-            LLMClient(model_name="gpt-4o")
+            client = LLMClient(model_name="gpt-4o")
             mock_chat_class.assert_called_once()
 
     def test_raises_for_unsupported_model(self):
@@ -113,11 +115,7 @@ class TestLLMClientConvertMessages:
     @pytest.fixture
     def client(self):
         """Create client with mocked model."""
-        patch_target = (
-            "subterminator.mcp_orchestrator.llm_client"
-            ".LLMClient._create_model"
-        )
-        with patch(patch_target) as mock:
+        with patch("subterminator.mcp_orchestrator.llm_client.LLMClient._create_model") as mock:
             mock.return_value = MagicMock()
             yield LLMClient(model_name="claude-3-opus")
 
@@ -174,11 +172,7 @@ class TestLLMClientInvoke:
     @pytest.fixture
     def mock_client(self):
         """Create a client with mocked model."""
-        patch_target = (
-            "subterminator.mcp_orchestrator.llm_client"
-            ".LLMClient._create_model"
-        )
-        with patch(patch_target) as mock_create:
+        with patch("subterminator.mcp_orchestrator.llm_client.LLMClient._create_model") as mock_create:
             mock_model = MagicMock()
             mock_create.return_value = mock_model
             client = LLMClient(model_name="claude-3-opus")
@@ -192,26 +186,12 @@ class TestLLMClientInvoke:
         mock_bound.ainvoke = AsyncMock(return_value=MagicMock())
         mock_model.bind_tools.return_value = mock_bound
 
-        # Tools can use inputSchema (MCP) or parameters (LangChain)
-        schema = {
-            "type": "object",
-            "properties": {"x": {"type": "string"}},
-        }
-        tools = [{
-            "name": "test_tool",
-            "description": "Test",
-            "inputSchema": schema,
-        }]
-        await client.invoke(
-            [{"role": "user", "content": "hi"}], tools
-        )
+        # Tools can use inputSchema (MCP format) or parameters (LangChain format)
+        tools = [{"name": "test_tool", "description": "Test", "inputSchema": {"type": "object", "properties": {"x": {"type": "string"}}}}]
+        await client.invoke([{"role": "user", "content": "hi"}], tools)
 
         # Should be converted to LangChain format with 'parameters'
-        expected_tools = [{
-            "name": "test_tool",
-            "description": "Test",
-            "parameters": schema,
-        }]
+        expected_tools = [{"name": "test_tool", "description": "Test", "parameters": {"type": "object", "properties": {"x": {"type": "string"}}}}]
         mock_model.bind_tools.assert_called_once_with(expected_tools)
 
     @pytest.mark.asyncio
@@ -228,9 +208,7 @@ class TestLLMClientInvoke:
 
         # Patch sleep to avoid waiting
         with patch("asyncio.sleep", new_callable=AsyncMock):
-            await client.invoke(
-                [{"role": "user", "content": "hi"}], []
-            )
+            result = await client.invoke([{"role": "user", "content": "hi"}], [])
 
         assert mock_bound.ainvoke.call_count == 3
 
@@ -257,13 +235,11 @@ class TestLLMClientInvoke:
         mock_bound = MagicMock()
         # Timeout twice, then succeed
         mock_bound.ainvoke = AsyncMock(
-            side_effect=[TimeoutError(), TimeoutError(), MagicMock()]
+            side_effect=[asyncio.TimeoutError(), asyncio.TimeoutError(), MagicMock()]
         )
         mock_model.bind_tools.return_value = mock_bound
 
         with patch("asyncio.sleep", new_callable=AsyncMock):
-            await client.invoke(
-                [{"role": "user", "content": "hi"}], []
-            )
+            result = await client.invoke([{"role": "user", "content": "hi"}], [])
 
         assert mock_bound.ainvoke.call_count == 3

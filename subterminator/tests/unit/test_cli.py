@@ -136,7 +136,7 @@ class TestCancelCommandOptions:
         mock_runner.run = MagicMock(return_value=mock_result)
         mock_runner_class.return_value = mock_runner
 
-        runner.invoke(app, ["cancel", "--service", "netflix", "--dry-run"])
+        result = runner.invoke(app, ["cancel", "--service", "netflix", "--dry-run"])
         # Should attempt to run MCP orchestration
         assert mock_runner.run.called
         # Verify dry_run was passed
