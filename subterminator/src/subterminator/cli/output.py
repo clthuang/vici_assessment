@@ -1,13 +1,10 @@
 """CLI output formatting utilities for SubTerminator.
 
 This module provides the OutputFormatter class for formatting and displaying
-CLI output including progress indicators, warnings, success/failure messages,
-and human prompts.
+CLI output including progress indicators, warnings, and human prompts.
 """
 
 from enum import Enum
-
-from subterminator.core.protocols import CancellationResult
 
 
 class PromptType(Enum):
@@ -22,7 +19,7 @@ class OutputFormatter:
     """Formats and displays CLI output.
 
     Provides methods for displaying progress indicators, warnings,
-    success/failure messages, and human prompts with consistent formatting.
+    and human prompts with consistent formatting.
 
     Attributes:
         verbose: Whether to enable verbose output mode.
@@ -126,52 +123,6 @@ class OutputFormatter:
             return response.strip().lower()
         except (EOFError, KeyboardInterrupt):
             return ""
-
-    def show_success(self, result: CancellationResult) -> None:
-        """Show success message with details.
-
-        Displays a formatted success message including the result message,
-        effective date (if available), and session directory (if available).
-
-        Args:
-            result: The cancellation result to display.
-        """
-        print("\n" + "=" * 60)
-        print("\033[32m✓ CANCELLATION SUCCESSFUL\033[0m")
-        print("=" * 60)
-        print(f"Status: {result.message}")
-        if result.effective_date:
-            print(f"Effective Date: {result.effective_date}")
-        if result.session_dir:
-            print(f"Session artifacts: {result.session_dir}")
-        print("=" * 60 + "\n")
-
-    def show_failure(self, result: CancellationResult) -> None:
-        """Show failure message with diagnostics.
-
-        Displays a formatted failure message including the result message,
-        final state, session directory for debugging (if available), and
-        manual cancellation instructions.
-
-        Args:
-            result: The cancellation result to display.
-        """
-        print("\n" + "=" * 60)
-        print("\033[31m✗ CANCELLATION FAILED\033[0m")
-        print("=" * 60)
-        print(f"Status: {result.message}")
-        print(f"Final State: {result.state.name}")
-
-        if result.session_dir:
-            print(f"\nSession artifacts for debugging: {result.session_dir}")
-            print("  - session.json: Full session log")
-            print("  - *.png: Screenshots at each step")
-
-        print("\nManual cancellation steps:")
-        print("  1. Go to https://www.netflix.com/account")
-        print("  2. Click 'Cancel Membership'")
-        print("  3. Follow the prompts to complete cancellation")
-        print("=" * 60 + "\n")
 
     def show_warning(self, message: str) -> None:
         """Show warning message.

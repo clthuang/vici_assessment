@@ -46,11 +46,27 @@ dmypy.json
 .ruff_cache/
 
 # Project specific
-output/
-mock_pages/netflix/assets/*.png
+subterminator/output/
+subterminator/mock_pages/netflix/assets/*.png
 *.log
+
+# Per-project .env
+*/.env
+
+# Agent sandbox (temporary investigation files)
+agent_sandbox/
+
+# Browser profile
 .chrome-profile/
+**/.chrome-profile/
+
+# project output
+output/
+**/output/
 
 # OS
 .DS_Store
 Thumbs.db
+docs/prds/VICI Claude Code 7-Day Challenge_ Jan 2026.pdf
+**/VICI Claude Code 7-Day Challenge_ Jan 2026.pdf
+subterminator/docs/prds/VICI Claude Code 7-Day Challenge_ Jan 2026.pdf
