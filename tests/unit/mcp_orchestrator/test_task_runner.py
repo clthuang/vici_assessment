@@ -1,13 +1,12 @@
 """Tests for task runner."""
 
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
 from subterminator.mcp_orchestrator.services.base import ServiceConfig
 from subterminator.mcp_orchestrator.services.registry import ServiceRegistry
 from subterminator.mcp_orchestrator.task_runner import (
-    MAX_NO_ACTION_COUNT,
     VIRTUAL_TOOLS,
     TaskRunner,
     get_all_tools,

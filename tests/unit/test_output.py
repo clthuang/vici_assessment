@@ -8,11 +8,9 @@ Tests cover:
 """
 
 from io import StringIO
-from pathlib import Path
 from unittest.mock import patch
 
 from subterminator.cli.output import OutputFormatter, PromptType
-from subterminator.core.protocols import CancellationResult, State
 
 
 class TestPromptType:
@@ -122,110 +120,6 @@ class TestOutputFormatterWarning:
 
             formatter.show_warning("Another warning")
             assert formatter._step == 1
-
-
-class TestOutputFormatterSuccess:
-    """Tests for OutputFormatter.show_success method."""
-
-    def test_show_success_displays_result_message(self) -> None:
-        """Success output should contain result message."""
-        formatter = OutputFormatter()
-        result = CancellationResult(
-            success=True,
-            state=State.COMPLETE,
-            message="Cancellation completed",
-        )
-
-        with patch("sys.stdout", new_callable=StringIO) as mock_stdout:
-            formatter.show_success(result)
-            output = mock_stdout.getvalue()
-
-        assert "SUCCESSFUL" in output
-        assert "Cancellation completed" in output
-
-    def test_show_success_displays_effective_date_when_present(self) -> None:
-        """Success output should include effective date if provided."""
-        formatter = OutputFormatter()
-        result = CancellationResult(
-            success=True,
-            state=State.COMPLETE,
-            message="Cancellation completed",
-            effective_date="2026-03-01",
-        )
-
-        with patch("sys.stdout", new_callable=StringIO) as mock_stdout:
-            formatter.show_success(result)
-            output = mock_stdout.getvalue()
-
-        assert "2026-03-01" in output
-        assert "Effective Date" in output
-
-    def test_show_success_displays_session_dir_when_present(self) -> None:
-        """Success output should include session directory if provided."""
-        formatter = OutputFormatter()
-        result = CancellationResult(
-            success=True,
-            state=State.COMPLETE,
-            message="Cancellation completed",
-            session_dir=Path("/tmp/session_123"),
-        )
-
-        with patch("sys.stdout", new_callable=StringIO) as mock_stdout:
-            formatter.show_success(result)
-            output = mock_stdout.getvalue()
-
-        assert "/tmp/session_123" in output
-
-
-class TestOutputFormatterFailure:
-    """Tests for OutputFormatter.show_failure method."""
-
-    def test_show_failure_displays_result_message(self) -> None:
-        """Failure output should contain result message."""
-        formatter = OutputFormatter()
-        result = CancellationResult(
-            success=False,
-            state=State.FAILED,
-            message="Network timeout",
-        )
-
-        with patch("sys.stdout", new_callable=StringIO) as mock_stdout:
-            formatter.show_failure(result)
-            output = mock_stdout.getvalue()
-
-        assert "FAILED" in output
-        assert "Network timeout" in output
-
-    def test_show_failure_displays_final_state(self) -> None:
-        """Failure output should show the final state."""
-        formatter = OutputFormatter()
-        result = CancellationResult(
-            success=False,
-            state=State.ABORTED,
-            message="User cancelled",
-        )
-
-        with patch("sys.stdout", new_callable=StringIO) as mock_stdout:
-            formatter.show_failure(result)
-            output = mock_stdout.getvalue()
-
-        assert "ABORTED" in output
-
-    def test_show_failure_includes_manual_instructions(self) -> None:
-        """Failure output should include manual cancellation steps."""
-        formatter = OutputFormatter()
-        result = CancellationResult(
-            success=False,
-            state=State.FAILED,
-            message="Automation failed",
-        )
-
-        with patch("sys.stdout", new_callable=StringIO) as mock_stdout:
-            formatter.show_failure(result)
-            output = mock_stdout.getvalue()
-
-        assert "Manual cancellation" in output
-        assert "netflix.com/account" in output
 
 
 class TestOutputFormatterThirdParty:

@@ -1,83 +1,16 @@
 """Shared pytest fixtures for SubTerminator tests.
 
 This module provides common fixtures used across unit, integration, and e2e tests.
-Fixtures include mocks for browser, AI interpreter, heuristic interpreter,
-session logger, config, services, and state machine.
+Fixtures include mocks for session logger, config, and services.
 """
 
 from pathlib import Path
-from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from subterminator.core.protocols import AIInterpretation, BrowserProtocol, State
-from subterminator.core.states import CancellationStateMachine
 from subterminator.services.netflix import NetflixService
 from subterminator.utils.config import AppConfig
 from subterminator.utils.session import SessionLogger
-
-
-@pytest.fixture
-def mock_browser() -> MagicMock:
-    """Mock browser for unit tests.
-
-    Creates a MagicMock that conforms to BrowserProtocol with all
-    async methods properly configured as AsyncMock.
-
-    Returns:
-        MagicMock: A mock browser instance with async method support.
-    """
-    browser = MagicMock(spec=BrowserProtocol)
-    # Make async methods return coroutines
-    browser.launch = AsyncMock()
-    browser.navigate = AsyncMock()
-    browser.click = AsyncMock()
-    browser.fill = AsyncMock()
-    browser.select_option = AsyncMock()
-    browser.screenshot = AsyncMock(return_value=b"fake_screenshot_data")
-    browser.html = AsyncMock(return_value="<html></html>")
-    browser.url = AsyncMock(return_value="https://example.com")
-    browser.text_content = AsyncMock(return_value="Sample text content")
-    browser.close = AsyncMock()
-    return browser
-
-
-@pytest.fixture
-def mock_ai() -> MagicMock:
-    """Mock AI interpreter for unit tests.
-
-    Creates a mock that returns a default AIInterpretation with
-    ACCOUNT_ACTIVE state and high confidence.
-
-    Returns:
-        MagicMock: A mock AI interpreter with interpret method.
-    """
-    ai = MagicMock()
-    ai.interpret = AsyncMock(return_value=AIInterpretation(
-        state=State.ACCOUNT_ACTIVE,
-        confidence=0.9,
-        reasoning="Test mock interpretation"
-    ))
-    return ai
-
-
-@pytest.fixture
-def mock_heuristic() -> MagicMock:
-    """Mock heuristic interpreter for unit tests.
-
-    Creates a mock that returns a default AIInterpretation with
-    ACCOUNT_ACTIVE state detected via heuristic rules.
-
-    Returns:
-        MagicMock: A mock heuristic interpreter with interpret method.
-    """
-    heuristic = MagicMock()
-    heuristic.interpret = MagicMock(return_value=AIInterpretation(
-        state=State.ACCOUNT_ACTIVE,
-        confidence=0.85,
-        reasoning="Heuristic detection"
-    ))
-    return heuristic
 
 
 @pytest.fixture
@@ -136,18 +69,6 @@ def netflix_service() -> NetflixService:
         NetflixService: A Netflix service configured for mock target.
     """
     return NetflixService(target="mock")
-
-
-@pytest.fixture
-def state_machine() -> CancellationStateMachine:
-    """Fresh state machine instance.
-
-    Creates a new CancellationStateMachine in its initial state.
-
-    Returns:
-        CancellationStateMachine: A fresh state machine instance.
-    """
-    return CancellationStateMachine()
 
 
 @pytest.fixture

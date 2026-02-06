@@ -1,8 +1,5 @@
 """Tests for MCP orchestrator exceptions."""
 
-import pytest
-
-from subterminator.utils.exceptions import ConfigurationError, SubTerminatorError
 
 from subterminator.mcp_orchestrator.exceptions import (
     CheckpointRejectedError,
@@ -13,6 +10,7 @@ from subterminator.mcp_orchestrator.exceptions import (
     ServiceNotFoundError,
     SnapshotValidationError,
 )
+from subterminator.utils.exceptions import ConfigurationError, SubTerminatorError
 
 
 class TestExceptionHierarchy:
@@ -67,12 +65,14 @@ class TestConfigurationErrorReexport:
 
     def test_configuration_error_importable(self):
         """ConfigurationError can be imported from mcp_orchestrator."""
-        from subterminator.mcp_orchestrator import ConfigurationError as CE
+        from subterminator.mcp_orchestrator import (
+            ConfigurationError as ConfigError,
+        )
         # Verify it's the same class from utils
-        assert CE is ConfigurationError
+        assert ConfigError is ConfigurationError
 
     def test_configuration_error_not_subclass_of_orchestrator_error(self):
-        """ConfigurationError is NOT a subclass of OrchestratorError (it's re-exported)."""
+        """ConfigurationError is NOT a subclass of OrchestratorError."""
         err = ConfigurationError("config missing")
         # It should NOT be an OrchestratorError - it's a separate hierarchy
         assert not isinstance(err, OrchestratorError)
