@@ -1,7 +1,5 @@
 """Tests for MCP orchestrator types."""
 
-import pytest
-
 from subterminator.mcp_orchestrator.types import (
     CheckpointPredicate,
     NormalizedSnapshot,
@@ -118,6 +116,7 @@ class TestTypeAliases:
 
     def test_snapshot_predicate_signature(self):
         """SnapshotPredicate has correct signature."""
+
         # Define a function matching the signature
         def has_login(snap: NormalizedSnapshot) -> bool:
             return "login" in snap.content.lower()
@@ -129,6 +128,7 @@ class TestTypeAliases:
 
     def test_checkpoint_predicate_signature(self):
         """CheckpointPredicate has correct signature."""
+
         # Define a function matching the signature
         def is_confirm_click(tool: ToolCall, snap: NormalizedSnapshot) -> bool:
             return tool.name == "browser_click" and "confirm" in str(tool.args).lower()

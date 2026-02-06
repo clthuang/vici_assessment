@@ -126,9 +126,7 @@ class MCPClient:
             from mcp import ClientSession
             from mcp.client.stdio import StdioServerParameters, stdio_client
         except ImportError:
-            raise ConfigurationError(
-                "mcp package not installed. Run: pip install mcp"
-            )
+            raise ConfigurationError("mcp package not installed. Run: pip install mcp")
 
         try:
             # Set up server parameters

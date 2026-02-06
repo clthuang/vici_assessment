@@ -53,7 +53,8 @@ class TestMCPClientConnect:
     @pytest.fixture
     def client(self):
         """Create a client with mocked Node.js check."""
-        with patch("subterminator.mcp_orchestrator.mcp_client.subprocess.run") as mock_run:
+        patch_target = "subterminator.mcp_orchestrator.mcp_client.subprocess.run"
+        with patch(patch_target) as mock_run:
             mock_run.return_value = MagicMock(returncode=0, stdout="v20.0.0")
             yield MCPClient()
 
@@ -81,7 +82,8 @@ class TestMCPClientListTools:
     @pytest.fixture
     def client(self):
         """Create a client with mocked Node.js check."""
-        with patch("subterminator.mcp_orchestrator.mcp_client.subprocess.run") as mock_run:
+        patch_target = "subterminator.mcp_orchestrator.mcp_client.subprocess.run"
+        with patch(patch_target) as mock_run:
             mock_run.return_value = MagicMock(returncode=0, stdout="v20.0.0")
             yield MCPClient()
 
@@ -111,7 +113,8 @@ class TestMCPClientCallTool:
     @pytest.fixture
     def client(self):
         """Create a client with mocked Node.js check."""
-        with patch("subterminator.mcp_orchestrator.mcp_client.subprocess.run") as mock_run:
+        patch_target = "subterminator.mcp_orchestrator.mcp_client.subprocess.run"
+        with patch(patch_target) as mock_run:
             mock_run.return_value = MagicMock(returncode=0, stdout="v20.0.0")
             yield MCPClient()
 
@@ -156,7 +159,8 @@ class TestMCPClientClose:
     @pytest.fixture
     def client(self):
         """Create a client with mocked Node.js check."""
-        with patch("subterminator.mcp_orchestrator.mcp_client.subprocess.run") as mock_run:
+        patch_target = "subterminator.mcp_orchestrator.mcp_client.subprocess.run"
+        with patch(patch_target) as mock_run:
             mock_run.return_value = MagicMock(returncode=0, stdout="v20.0.0")
             yield MCPClient()
 
@@ -187,7 +191,8 @@ class TestMCPClientContextManager:
     @pytest.fixture
     def client(self):
         """Create a client with mocked Node.js check."""
-        with patch("subterminator.mcp_orchestrator.mcp_client.subprocess.run") as mock_run:
+        patch_target = "subterminator.mcp_orchestrator.mcp_client.subprocess.run"
+        with patch(patch_target) as mock_run:
             mock_run.return_value = MagicMock(returncode=0, stdout="v20.0.0")
             yield MCPClient()
 
@@ -222,7 +227,8 @@ class TestMCPClientReconnect:
     @pytest.fixture
     def client(self):
         """Create a client with mocked Node.js check."""
-        with patch("subterminator.mcp_orchestrator.mcp_client.subprocess.run") as mock_run:
+        patch_target = "subterminator.mcp_orchestrator.mcp_client.subprocess.run"
+        with patch(patch_target) as mock_run:
             mock_run.return_value = MagicMock(returncode=0, stdout="v20.0.0")
             yield MCPClient()
 

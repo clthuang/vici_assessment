@@ -18,13 +18,13 @@ if TYPE_CHECKING:
 
 # Task completion reasons
 TaskReason = Literal[
-    "completed",           # Task completed successfully
-    "human_rejected",      # Human rejected a checkpoint
+    "completed",  # Task completed successfully
+    "human_rejected",  # Human rejected a checkpoint
     "max_turns_exceeded",  # Hit maximum turn limit
-    "llm_no_action",       # LLM failed to call tools 3 times
-    "llm_error",           # LLM API error
-    "mcp_error",           # MCP connection or tool error
-    "verification_failed", # Success indicators not found
+    "llm_no_action",  # LLM failed to call tools 3 times
+    "llm_error",  # LLM API error
+    "mcp_error",  # MCP connection or tool error
+    "verification_failed",  # Success indicators not found
 ]
 
 

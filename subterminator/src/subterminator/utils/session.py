@@ -160,9 +160,7 @@ class SessionLogger:
         self.data["ai_calls"].append(asdict(ai_call))
         self._save()
 
-    def complete(
-        self, result: str, final_state: str, error: str | None = None
-    ) -> None:
+    def complete(self, result: str, final_state: str, error: str | None = None) -> None:
         """Mark session complete.
 
         Args:

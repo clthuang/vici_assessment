@@ -105,10 +105,10 @@ class CheckpointHandler:
                 "then press Enter to continue..."
             ),
         }
-        print(f"\n{'='*60}")
+        print(f"\n{'=' * 60}")
         print(f"  {messages.get(auth_type, messages['auth'])}")
         print(f"  Current URL: {snapshot.url}")
-        print(f"{'='*60}")
+        print(f"{'=' * 60}")
 
         try:
             input("\nPress Enter when done (or Ctrl+C to cancel)...")

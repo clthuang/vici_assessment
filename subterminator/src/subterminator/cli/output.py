@@ -82,17 +82,13 @@ class OutputFormatter:
         """
         prompts = {
             PromptType.AUTH: (
-                "\n"
-                + "=" * 60
-                + "\n"
+                "\n" + "=" * 60 + "\n"
                 "AUTHENTICATION REQUIRED\n"
                 "Please log in to Netflix in the browser window.\n"
                 "Press Enter when you have logged in...\n" + "=" * 60 + "\n"
             ),
             PromptType.CONFIRM: (
-                "\n"
-                + "=" * 60
-                + "\n"
+                "\n" + "=" * 60 + "\n"
                 "\033[33mWARNING: FINAL CONFIRMATION\033[0m\n"
                 "This action will cancel your Netflix subscription.\n"
                 "You will lose access at the end of your billing period.\n"
@@ -104,9 +100,7 @@ class OutputFormatter:
                 "Type 'confirm' to proceed, or anything else to abort: "
             ),
             PromptType.UNKNOWN: (
-                "\n"
-                + "=" * 60
-                + "\n"
+                "\n" + "=" * 60 + "\n"
                 "UNKNOWN PAGE STATE\n"
                 "Could not automatically detect the current page.\n"
                 "Please navigate manually if needed, then press Enter...\n"

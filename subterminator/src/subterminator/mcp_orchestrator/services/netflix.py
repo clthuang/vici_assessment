@@ -19,6 +19,7 @@ from .registry import default_registry
 # Checkpoint Predicates (CheckpointPredicate: tool + snapshot -> bool)
 # =============================================================================
 
+
 def is_destructive_click(tool: ToolCall, snap: NormalizedSnapshot) -> bool:
     """Triggers on clicks with finish/confirm/complete keywords (spec 2.5.3).
 
@@ -27,7 +28,13 @@ def is_destructive_click(tool: ToolCall, snap: NormalizedSnapshot) -> bool:
     if tool.name != "browser_click":
         return False
     element = tool.args.get("element", "").lower()
-    finality_keywords = ["finish", "confirm", "complete", "cancel membership", "end membership"]
+    finality_keywords = [
+        "finish",
+        "confirm",
+        "complete",
+        "cancel membership",
+        "end membership",
+    ]
     return any(kw in element for kw in finality_keywords)
 
 
@@ -59,6 +66,7 @@ NETFLIX_CHECKPOINT_CONDITIONS: list[CheckpointPredicate] = [
 # =============================================================================
 # Success Indicators (SnapshotPredicate: snapshot -> bool)
 # =============================================================================
+
 
 def has_cancellation_confirmed(snap: NormalizedSnapshot) -> bool:
     """Check for cancellation confirmation message."""
@@ -127,6 +135,7 @@ NETFLIX_SUCCESS_INDICATORS: list[SnapshotPredicate] = [
 # Failure Indicators (SnapshotPredicate: snapshot -> bool)
 # =============================================================================
 
+
 def has_error_message(snap: NormalizedSnapshot) -> bool:
     """Check for error messages."""
     content_lower = snap.content.lower()
@@ -140,10 +149,7 @@ def has_error_message(snap: NormalizedSnapshot) -> bool:
 def has_try_again(snap: NormalizedSnapshot) -> bool:
     """Check for try again prompts."""
     content_lower = snap.content.lower()
-    return (
-        "please try again" in content_lower
-        or "try again later" in content_lower
-    )
+    return "please try again" in content_lower or "try again later" in content_lower
 
 
 def has_login_required(snap: NormalizedSnapshot) -> bool:
@@ -151,10 +157,7 @@ def has_login_required(snap: NormalizedSnapshot) -> bool:
     if "/login" in snap.url.lower():
         return False  # Expected on login page
     content_lower = snap.content.lower()
-    return (
-        "please sign in" in content_lower
-        or "login required" in content_lower
-    )
+    return "please sign in" in content_lower or "login required" in content_lower
 
 
 def has_session_expired(snap: NormalizedSnapshot) -> bool:
@@ -178,6 +181,7 @@ NETFLIX_FAILURE_INDICATORS: list[SnapshotPredicate] = [
 # =============================================================================
 # Auth Edge Case Detectors (SnapshotPredicate: snapshot -> bool)
 # =============================================================================
+
 
 def is_login_page(snap: NormalizedSnapshot) -> bool:
     """Detect login page."""

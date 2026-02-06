@@ -111,8 +111,8 @@ content"""
         result = normalize_snapshot(text)
 
         assert "document [ref=@e0]" in result.content
-        assert "link \"Home\"" in result.content
-        assert "heading \"Welcome\"" in result.content
+        assert 'link "Home"' in result.content
+        assert 'heading "Welcome"' in result.content
 
     def test_handles_special_characters_in_content(self):
         """normalize_snapshot handles special chars in content."""
