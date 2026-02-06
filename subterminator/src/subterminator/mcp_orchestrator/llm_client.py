@@ -117,9 +117,7 @@ class LLMClient:
 
         api_key = os.environ.get("ANTHROPIC_API_KEY")
         if not api_key:
-            raise ConfigurationError(
-                "ANTHROPIC_API_KEY environment variable not set."
-            )
+            raise ConfigurationError("ANTHROPIC_API_KEY environment variable not set.")
 
         return ChatAnthropic(  # type: ignore[call-arg]
             model=self._model_name,
@@ -139,15 +137,12 @@ class LLMClient:
             from langchain_openai import ChatOpenAI
         except ImportError:
             raise ConfigurationError(
-                "langchain-openai not installed. "
-                "Run: pip install langchain-openai"
+                "langchain-openai not installed. Run: pip install langchain-openai"
             )
 
         api_key = os.environ.get("OPENAI_API_KEY")
         if not api_key:
-            raise ConfigurationError(
-                "OPENAI_API_KEY environment variable not set."
-            )
+            raise ConfigurationError("OPENAI_API_KEY environment variable not set.")
 
         return ChatOpenAI(
             model=self._model_name,
@@ -264,18 +259,12 @@ class LLMClient:
                 return response
 
             except TimeoutError:
-                last_error = LLMError(
-                    f"LLM call timed out after {LLM_TIMEOUT} seconds"
-                )
-                logger.warning(
-                    f"LLM timeout (attempt {attempt + 1}/{MAX_RETRIES})"
-                )
+                last_error = LLMError(f"LLM call timed out after {LLM_TIMEOUT} seconds")
+                logger.warning(f"LLM timeout (attempt {attempt + 1}/{MAX_RETRIES})")
 
             except Exception as e:
                 last_error = e
-                logger.warning(
-                    f"LLM error (attempt {attempt + 1}/{MAX_RETRIES}): {e}"
-                )
+                logger.warning(f"LLM error (attempt {attempt + 1}/{MAX_RETRIES}): {e}")
 
             # Wait before retry (except on last attempt)
             if attempt < MAX_RETRIES - 1:

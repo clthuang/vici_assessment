@@ -183,11 +183,13 @@ def cancel(
         # Run orchestration
         console.print("\n[dim]Starting orchestration...[/dim]\n")
 
-        result = asyncio.run(runner.run(
-            service=selected_service,
-            max_turns=max_turns,
-            dry_run=dry_run,
-        ))
+        result = asyncio.run(
+            runner.run(
+                service=selected_service,
+                max_turns=max_turns,
+                dry_run=dry_run,
+            )
+        )
 
         # Display result
         if result.success:

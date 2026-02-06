@@ -26,6 +26,7 @@ class TestServiceConfig:
 
     def test_create_full_config(self):
         """ServiceConfig can be created with all fields."""
+
         def checkpoint(tool: ToolCall, snap: NormalizedSnapshot) -> bool:
             return True
 
@@ -74,8 +75,10 @@ class TestServiceRegistry:
     def test_get_unknown_shows_available(self):
         """Error message shows available services."""
         registry = ServiceRegistry()
-        registry.register(ServiceConfig(name="svc1", initial_url="u", goal_template="g"))
-        registry.register(ServiceConfig(name="svc2", initial_url="u", goal_template="g"))
+        cfg1 = ServiceConfig(name="svc1", initial_url="u", goal_template="g")
+        cfg2 = ServiceConfig(name="svc2", initial_url="u", goal_template="g")
+        registry.register(cfg1)
+        registry.register(cfg2)
 
         with pytest.raises(ServiceNotFoundError) as exc_info:
             registry.get("unknown")
@@ -85,8 +88,10 @@ class TestServiceRegistry:
     def test_list_services(self):
         """list_services() returns sorted service names."""
         registry = ServiceRegistry()
-        registry.register(ServiceConfig(name="zebra", initial_url="u", goal_template="g"))
-        registry.register(ServiceConfig(name="alpha", initial_url="u", goal_template="g"))
+        cfg_z = ServiceConfig(name="zebra", initial_url="u", goal_template="g")
+        cfg_a = ServiceConfig(name="alpha", initial_url="u", goal_template="g")
+        registry.register(cfg_z)
+        registry.register(cfg_a)
 
         result = registry.list_services()
         assert result == ["alpha", "zebra"]
@@ -104,8 +109,8 @@ class TestNetflixConfig:
     def netflix_config(self):
         """Get Netflix config from default registry."""
         # Import here to trigger registration
-        from subterminator.mcp_orchestrator.services import netflix
         from subterminator.mcp_orchestrator.services.registry import default_registry
+
         return default_registry.get("netflix")
 
     def test_netflix_registered(self, netflix_config):
@@ -114,7 +119,7 @@ class TestNetflixConfig:
         assert "netflix.com" in netflix_config.initial_url
 
     def test_netflix_has_checkpoint_conditions(self, netflix_config):
-        """Netflix config has checkpoint conditions (minimal for low-risk cancel flow)."""
+        """Netflix config has checkpoint conditions."""
         # Only payment page protection - cancel is reversible so minimal checkpoints
         assert len(netflix_config.checkpoint_conditions) >= 1
 
@@ -138,6 +143,7 @@ class TestNetflixCheckpointPredicates:
             is_final_cancel_page,
             is_payment_page,
         )
+
         return {
             "destructive": is_destructive_click,
             "final_cancel": is_final_cancel_page,
@@ -146,7 +152,11 @@ class TestNetflixCheckpointPredicates:
 
     def test_destructive_click_triggers(self, predicates):
         """is_destructive_click triggers on finality keywords."""
-        tool = ToolCall(id="1", name="browser_click", args={"element": "Finish Cancellation"})
+        tool = ToolCall(
+            id="1",
+            name="browser_click",
+            args={"element": "Finish Cancellation"},
+        )
         snap = NormalizedSnapshot(url="/cancel", title="Cancel", content="page content")
         assert predicates["destructive"](tool, snap) is True
 
@@ -168,7 +178,7 @@ class TestNetflixCheckpointPredicates:
         snap = NormalizedSnapshot(
             url="/cancel",
             title="Cancel",
-            content="Click Finish to cancel your membership"
+            content="Click Finish to cancel your membership",
         )
         assert predicates["final_cancel"](tool, snap) is True
 
@@ -182,13 +192,21 @@ class TestNetflixCheckpointPredicates:
     def test_payment_page_triggers_on_url(self, predicates):
         """is_payment_page triggers on payment in URL."""
         tool = ToolCall(id="1", name="browser_click", args={})
-        snap = NormalizedSnapshot(url="/payment-method", title="Payment", content="card")
+        snap = NormalizedSnapshot(
+            url="/payment-method",
+            title="Payment",
+            content="card",
+        )
         assert predicates["payment"](tool, snap) is True
 
     def test_payment_page_triggers_on_content(self, predicates):
         """is_payment_page triggers on billing in content."""
         tool = ToolCall(id="1", name="browser_click", args={})
-        snap = NormalizedSnapshot(url="/settings", title="Settings", content="billing info")
+        snap = NormalizedSnapshot(
+            url="/settings",
+            title="Settings",
+            content="billing info",
+        )
         assert predicates["payment"](tool, snap) is True
 
 
@@ -204,6 +222,7 @@ class TestNetflixSuccessIndicators:
             has_membership_ended,
             has_restart_option,
         )
+
         return {
             "confirmed": has_cancellation_confirmed,
             "ended": has_membership_ended,
@@ -214,27 +233,21 @@ class TestNetflixSuccessIndicators:
     def test_cancellation_confirmed_triggers(self, indicators):
         """has_cancellation_confirmed detects confirmation."""
         snap = NormalizedSnapshot(
-            url="/done",
-            title="Done",
-            content="Your cancellation confirmed. Thank you."
+            url="/done", title="Done", content="Your cancellation confirmed. Thank you."
         )
         assert indicators["confirmed"](snap) is True
 
     def test_membership_ended_triggers(self, indicators):
         """has_membership_ended detects end message."""
         snap = NormalizedSnapshot(
-            url="/done",
-            title="Done",
-            content="Your membership will end on December 31"
+            url="/done", title="Done", content="Your membership will end on December 31"
         )
         assert indicators["ended"](snap) is True
 
     def test_restart_option_triggers(self, indicators):
         """has_restart_option detects restart membership link."""
         snap = NormalizedSnapshot(
-            url="/account",
-            title="Account",
-            content="Click here to restart membership"
+            url="/account", title="Account", content="Click here to restart membership"
         )
         assert indicators["restart"](snap) is True
 
@@ -243,7 +256,7 @@ class TestNetflixSuccessIndicators:
         snap = NormalizedSnapshot(
             url="/account",
             title="Account",
-            content="You cancelled your membership on January 15"
+            content="You cancelled your membership on January 15",
         )
         assert indicators["already_cancelled"](snap) is True
 
@@ -252,7 +265,7 @@ class TestNetflixSuccessIndicators:
         snap = NormalizedSnapshot(
             url="/account",
             title="Account",
-            content="Your membership is cancelled. Restart anytime."
+            content="Your membership is cancelled. Restart anytime.",
         )
         assert indicators["already_cancelled"](snap) is True
 
@@ -265,9 +278,10 @@ class TestNetflixFailureIndicators:
         """Get Netflix failure indicators."""
         from subterminator.mcp_orchestrator.services.netflix import (
             has_error_message,
-            has_try_again,
             has_session_expired,
+            has_try_again,
         )
+
         return {
             "error": has_error_message,
             "try_again": has_try_again,
@@ -279,7 +293,7 @@ class TestNetflixFailureIndicators:
         snap = NormalizedSnapshot(
             url="/cancel",
             title="Error",
-            content="Something went wrong. Please contact support."
+            content="Something went wrong. Please contact support.",
         )
         assert indicators["error"](snap) is True
 
@@ -288,7 +302,7 @@ class TestNetflixFailureIndicators:
         snap = NormalizedSnapshot(
             url="/cancel",
             title="Error",
-            content="Unable to process. Please try again later."
+            content="Unable to process. Please try again later.",
         )
         assert indicators["try_again"](snap) is True
 
@@ -297,7 +311,7 @@ class TestNetflixFailureIndicators:
         snap = NormalizedSnapshot(
             url="/cancel",
             title="Session",
-            content="Your session has expired. Please sign in again."
+            content="Your session has expired. Please sign in again.",
         )
         assert indicators["expired"](snap) is True
 
@@ -309,10 +323,11 @@ class TestNetflixAuthEdgeCases:
     def detectors(self):
         """Get Netflix auth edge case detectors."""
         from subterminator.mcp_orchestrator.services.netflix import (
-            is_login_page,
             is_captcha_page,
+            is_login_page,
             is_mfa_page,
         )
+
         return {
             "login": is_login_page,
             "captcha": is_captcha_page,
@@ -324,16 +339,14 @@ class TestNetflixAuthEdgeCases:
         snap = NormalizedSnapshot(
             url="https://www.netflix.com/login",
             title="Sign In",
-            content="Email and password"
+            content="Email and password",
         )
         assert detectors["login"](snap) is True
 
     def test_captcha_page_detected(self, detectors):
         """is_captcha_page detects CAPTCHA."""
         snap = NormalizedSnapshot(
-            url="/verify",
-            title="Verify",
-            content="Please verify you're human"
+            url="/verify", title="Verify", content="Please verify you're human"
         )
         assert detectors["captcha"](snap) is True
 
@@ -342,6 +355,6 @@ class TestNetflixAuthEdgeCases:
         snap = NormalizedSnapshot(
             url="/verify",
             title="Verify",
-            content="Enter the verification code from your authenticator app"
+            content="Enter the verification code from your authenticator app",
         )
         assert detectors["mfa"](snap) is True

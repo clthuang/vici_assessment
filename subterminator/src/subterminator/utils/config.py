@@ -40,9 +40,7 @@ class ConfigLoader:
         return AppConfig(
             anthropic_api_key=os.environ.get("ANTHROPIC_API_KEY"),
             output_dir=output_dir,
-            page_timeout=ConfigLoader._get_int_env(
-                "SUBTERMINATOR_PAGE_TIMEOUT", 30000
-            ),
+            page_timeout=ConfigLoader._get_int_env("SUBTERMINATOR_PAGE_TIMEOUT", 30000),
             element_timeout=ConfigLoader._get_int_env(
                 "SUBTERMINATOR_ELEMENT_TIMEOUT", 10000
             ),

@@ -1,6 +1,5 @@
 """Unit tests for Netflix service implementation."""
 
-
 from subterminator.services.netflix import (
     NetflixService,
     ServiceConfig,
@@ -15,16 +14,12 @@ class TestServiceSelectors:
     def test_selectors_initialization_with_selector_config(self):
         """Test ServiceSelectors can be initialized with SelectorConfig fields."""
         selectors = ServiceSelectors(
-            cancel_link=SelectorConfig(
-                css=["selector1"], aria=("link", "Cancel")
-            ),
+            cancel_link=SelectorConfig(css=["selector1"], aria=("link", "Cancel")),
             decline_offer=SelectorConfig(
                 css=["selector2"], aria=("button", "Continue")
             ),
             survey_option=SelectorConfig(css=["selector3"], aria=None),
-            survey_submit=SelectorConfig(
-                css=["selector4"], aria=("button", "Submit")
-            ),
+            survey_submit=SelectorConfig(css=["selector4"], aria=("button", "Submit")),
             confirm_cancel=SelectorConfig(
                 css=["selector5"], aria=("button", "Confirm")
             ),

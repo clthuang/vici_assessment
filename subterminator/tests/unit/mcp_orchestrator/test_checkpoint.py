@@ -40,16 +40,14 @@ class TestShouldCheckpoint:
         return NormalizedSnapshot(
             url="https://example.com/cancel",
             title="Cancel",
-            content="finish your cancellation"
+            content="finish your cancellation",
         )
 
     @pytest.fixture
     def tool(self):
         """Create test tool call."""
         return ToolCall(
-            id="1",
-            name="browser_click",
-            args={"element": "Finish Cancellation"}
+            id="1", name="browser_click", args={"element": "Finish Cancellation"}
         )
 
     def test_returns_false_when_disabled(self, snap, tool):
@@ -65,6 +63,7 @@ class TestShouldCheckpoint:
 
     def test_triggers_on_checkpoint_condition(self, handler, snap, tool):
         """should_checkpoint returns True when condition matches."""
+
         def matches_finish(t: ToolCall, s: NormalizedSnapshot) -> bool:
             return "finish" in t.args.get("element", "").lower()
 
@@ -93,11 +92,11 @@ class TestShouldCheckpoint:
         assert handler.should_checkpoint(tool, snap, config) is False
 
     def test_auth_edge_case_handled_separately(self, handler):
-        """Auth edge cases are NOT handled via should_checkpoint (handled separately)."""
+        """Auth edge cases are NOT handled via should_checkpoint."""
         snap = NormalizedSnapshot(
             url="https://example.com/login",
             title="Sign In",
-            content="email and password"
+            content="email and password",
         )
         tool = ToolCall(id="1", name="browser_click", args={})
 
@@ -110,11 +109,12 @@ class TestShouldCheckpoint:
             goal_template="g",
             auth_edge_case_detectors=[is_login],
         )
-        # Auth edge cases are now handled via detect_auth_edge_case(), not should_checkpoint()
+        # Auth edge cases handled via detect_auth_edge_case()
         assert handler.should_checkpoint(tool, snap, config) is False
 
     def test_handles_predicate_exception(self, handler, snap, tool):
         """should_checkpoint handles exceptions in predicates."""
+
         def bad_predicate(t: ToolCall, s: NormalizedSnapshot) -> bool:
             raise ValueError("broken")
 
@@ -146,17 +146,13 @@ class TestRequestApproval:
         return NormalizedSnapshot(
             url="https://example.com/cancel",
             title="Cancel Membership",
-            content="Click finish to cancel"
+            content="Click finish to cancel",
         )
 
     @pytest.fixture
     def tool(self):
         """Create test tool call."""
-        return ToolCall(
-            id="1",
-            name="browser_click",
-            args={"element": "Finish"}
-        )
+        return ToolCall(id="1", name="browser_click", args={"element": "Finish"})
 
     @pytest.mark.asyncio
     async def test_approval_yes(self, handler, snap, tool):
@@ -224,9 +220,7 @@ class TestDetectAuthEdgeCase:
     def test_detects_login_page(self, handler):
         """detect_auth_edge_case returns 'login' for login pages."""
         snap = NormalizedSnapshot(
-            url="https://example.com/login",
-            title="Sign In",
-            content="Enter your email"
+            url="https://example.com/login", title="Sign In", content="Enter your email"
         )
 
         def is_login_page(s: NormalizedSnapshot) -> bool:
@@ -245,7 +239,7 @@ class TestDetectAuthEdgeCase:
         snap = NormalizedSnapshot(
             url="https://example.com/verify",
             title="Verify",
-            content="captcha verification"
+            content="captcha verification",
         )
 
         def is_captcha_page(s: NormalizedSnapshot) -> bool:
@@ -264,7 +258,7 @@ class TestDetectAuthEdgeCase:
         snap = NormalizedSnapshot(
             url="https://example.com/verify",
             title="Verify",
-            content="Enter your mfa code"
+            content="Enter your mfa code",
         )
 
         def is_mfa_page(s: NormalizedSnapshot) -> bool:
@@ -283,7 +277,7 @@ class TestDetectAuthEdgeCase:
         snap = NormalizedSnapshot(
             url="https://example.com/account",
             title="Account",
-            content="Your account settings"
+            content="Your account settings",
         )
 
         def is_login_page(s: NormalizedSnapshot) -> bool:
@@ -328,7 +322,7 @@ class TestWaitForAuthCompletion:
         return NormalizedSnapshot(
             url="https://example.com/login",
             title="Sign In",
-            content="Enter credentials"
+            content="Enter credentials",
         )
 
     @pytest.mark.asyncio

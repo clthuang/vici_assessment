@@ -18,4 +18,5 @@ def test_module_entry_point_help():
 def test_module_imports():
     """Test that __main__ module can be imported."""
     import subterminator.__main__
+
     assert hasattr(subterminator.__main__, "app")

@@ -252,6 +252,7 @@ class TestModuleExports:
             TransientError,
             UserAborted,
         )
+
         # Just verify they imported successfully
         assert SubTerminatorError is not None
         assert TransientError is not None

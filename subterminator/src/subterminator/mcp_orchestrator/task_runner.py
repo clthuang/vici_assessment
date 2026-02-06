@@ -34,7 +34,7 @@ VIRTUAL_TOOLS = {
     "complete_task": {
         "name": "complete_task",
         "description": "Call this when the task is complete or has failed. "
-                      "status='success' if the goal was achieved, 'failed' if not.",
+        "status='success' if the goal was achieved, 'failed' if not.",
         "inputSchema": {
             "type": "object",
             "properties": {
@@ -54,7 +54,7 @@ VIRTUAL_TOOLS = {
     "request_human_approval": {
         "name": "request_human_approval",
         "description": "Request human approval before proceeding with an action. "
-                      "Use this for irreversible actions or when unsure.",
+        "Use this for irreversible actions or when unsure.",
         "inputSchema": {
             "type": "object",
             "properties": {
@@ -282,14 +282,18 @@ class TaskRunner:
                         )
 
                     # Prompt for action (exact match to spec Section 2.4.2)
-                    self._messages.append({
-                        "role": "assistant",
-                        "content": response.content or "",
-                    })
-                    self._messages.append({
-                        "role": "user",
-                        "content": "Call a tool or complete_task.",
-                    })
+                    self._messages.append(
+                        {
+                            "role": "assistant",
+                            "content": response.content or "",
+                        }
+                    )
+                    self._messages.append(
+                        {
+                            "role": "user",
+                            "content": "Call a tool or complete_task.",
+                        }
+                    )
                     continue
 
                 # Reset no_action counter
@@ -344,15 +348,21 @@ class TaskRunner:
                             )
                         # Refresh snapshot after auth and skip this tool call
                         try:
-                            snapshot_text = await self._mcp.call_tool("browser_snapshot", {})
+                            snapshot_text = await self._mcp.call_tool(
+                                "browser_snapshot", {}
+                            )
                             snapshot = normalize_snapshot(snapshot_text)
                             # Add snapshot to messages so LLM sees updated state
-                            self._messages.append({
-                                "role": "user",
-                                "content": f"Authentication completed. Current page:\n{snapshot_text}",
-                            })
+                            self._messages.append(
+                                {
+                                    "role": "user",
+                                    "content": f"Authentication completed. Current page:\n{snapshot_text}",
+                                }
+                            )
                         except Exception as e:
-                            logger.warning(f"Failed to refresh snapshot after auth: {e}")
+                            logger.warning(
+                                f"Failed to refresh snapshot after auth: {e}"
+                            )
                         continue  # Skip executing the tool, let LLM decide next action
 
                     # Check for checkpoint
@@ -386,21 +396,27 @@ class TaskRunner:
                             )
 
                 # Update messages with tool result
-                self._messages.append({
-                    "role": "assistant",
-                    "content": response.content or "",
-                    "tool_calls": [{"id": tc.id, "name": tc.name, "args": tc.args}],
-                })
-                self._messages.append({
-                    "role": "tool",
-                    "content": tool_result,
-                    "tool_call_id": tc.id,
-                })
+                self._messages.append(
+                    {
+                        "role": "assistant",
+                        "content": response.content or "",
+                        "tool_calls": [{"id": tc.id, "name": tc.name, "args": tc.args}],
+                    }
+                )
+                self._messages.append(
+                    {
+                        "role": "tool",
+                        "content": tool_result,
+                        "tool_call_id": tc.id,
+                    }
+                )
 
                 # Update snapshot if we called a navigation/action tool
                 if tc.name in ["browser_navigate", "browser_click", "browser_type"]:
                     try:
-                        snapshot_text = await self._mcp.call_tool("browser_snapshot", {})
+                        snapshot_text = await self._mcp.call_tool(
+                            "browser_snapshot", {}
+                        )
                         snapshot = normalize_snapshot(snapshot_text)
                     except Exception as e:
                         logger.warning(f"Failed to update snapshot: {e}")

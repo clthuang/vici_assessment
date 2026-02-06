@@ -1,13 +1,12 @@
 """Tests for task runner."""
 
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
 from subterminator.mcp_orchestrator.services.base import ServiceConfig
 from subterminator.mcp_orchestrator.services.registry import ServiceRegistry
 from subterminator.mcp_orchestrator.task_runner import (
-    MAX_NO_ACTION_COUNT,
     VIRTUAL_TOOLS,
     TaskRunner,
     get_all_tools,
@@ -118,11 +117,13 @@ class TestTaskRunnerRun:
     def mock_registry(self):
         """Create registry with test config."""
         registry = ServiceRegistry()
-        registry.register(ServiceConfig(
-            name="test",
-            initial_url="https://test.com",
-            goal_template="Test goal",
-        ))
+        registry.register(
+            ServiceConfig(
+                name="test",
+                initial_url="https://test.com",
+                goal_template="Test goal",
+            )
+        )
         return registry
 
     @pytest.fixture
@@ -131,21 +132,25 @@ class TestTaskRunnerRun:
         mcp = AsyncMock()
         mcp.connect = AsyncMock()
         mcp.close = AsyncMock()
-        mcp.list_tools = AsyncMock(return_value=[
-            {"name": "browser_click"},
-            {"name": "browser_navigate"},
-            {"name": "browser_snapshot"},
-        ])
-        mcp.call_tool = AsyncMock(side_effect=[
-            # browser_navigate
-            "Navigated to test.com",
-            # browser_snapshot
-            """### Page state
+        mcp.list_tools = AsyncMock(
+            return_value=[
+                {"name": "browser_click"},
+                {"name": "browser_navigate"},
+                {"name": "browser_snapshot"},
+            ]
+        )
+        mcp.call_tool = AsyncMock(
+            side_effect=[
+                # browser_navigate
+                "Navigated to test.com",
+                # browser_snapshot
+                """### Page state
 - Page URL: https://test.com
 - Page Title: Test Page
 - Page Snapshot:
 - document [ref=@e0]""",
-        ])
+            ]
+        )
         return mcp
 
     @pytest.fixture
@@ -154,11 +159,13 @@ class TestTaskRunnerRun:
         llm = AsyncMock()
         response = MagicMock()
         response.content = "I will complete the task"
-        response.tool_calls = [{
-            "id": "call_1",
-            "name": "complete_task",
-            "args": {"status": "success", "reason": "Done"},
-        }]
+        response.tool_calls = [
+            {
+                "id": "call_1",
+                "name": "complete_task",
+                "args": {"status": "success", "reason": "Done"},
+            }
+        ]
         llm.invoke = AsyncMock(return_value=response)
         return llm
 
@@ -187,19 +194,23 @@ class TestTaskRunnerRun:
         # LLM always returns a non-completion tool
         response = MagicMock()
         response.content = ""
-        response.tool_calls = [{
-            "id": "call_1",
-            "name": "browser_snapshot",
-            "args": {},
-        }]
+        response.tool_calls = [
+            {
+                "id": "call_1",
+                "name": "browser_snapshot",
+                "args": {},
+            }
+        ]
         mock_llm.invoke = AsyncMock(return_value=response)
 
         # MCP returns snapshot for each call
-        mock_mcp.call_tool = AsyncMock(return_value="""### Page state
+        mock_mcp.call_tool = AsyncMock(
+            return_value="""### Page state
 - Page URL: https://test.com
 - Page Title: Test
 - Page Snapshot:
-content""")
+content"""
+        )
 
         runner = TaskRunner(mock_mcp, mock_llm, service_registry=mock_registry)
         result = await runner.run("test", max_turns=3)
@@ -217,11 +228,13 @@ content""")
         response.tool_calls = []
         mock_llm.invoke = AsyncMock(return_value=response)
 
-        mock_mcp.call_tool = AsyncMock(return_value="""### Page state
+        mock_mcp.call_tool = AsyncMock(
+            return_value="""### Page state
 - Page URL: https://test.com
 - Page Title: Test
 - Page Snapshot:
-content""")
+content"""
+        )
 
         runner = TaskRunner(mock_mcp, mock_llm, service_registry=mock_registry)
         result = await runner.run("test", max_turns=10)
@@ -234,18 +247,22 @@ content""")
         """run() with dry_run returns proposed action."""
         response = MagicMock()
         response.content = ""
-        response.tool_calls = [{
-            "id": "call_1",
-            "name": "browser_click",
-            "args": {"element": "button#submit"},
-        }]
+        response.tool_calls = [
+            {
+                "id": "call_1",
+                "name": "browser_click",
+                "args": {"element": "button#submit"},
+            }
+        ]
         mock_llm.invoke = AsyncMock(return_value=response)
 
-        mock_mcp.call_tool = AsyncMock(return_value="""### Page state
+        mock_mcp.call_tool = AsyncMock(
+            return_value="""### Page state
 - Page URL: https://test.com
 - Page Title: Test
 - Page Snapshot:
-content""")
+content"""
+        )
 
         runner = TaskRunner(mock_mcp, mock_llm, service_registry=mock_registry)
         result = await runner.run("test", dry_run=True)
@@ -266,9 +283,7 @@ class TestHandleCompleteTask:
     def snap(self):
         """Create test snapshot."""
         return NormalizedSnapshot(
-            url="https://test.com/done",
-            title="Done",
-            content="cancellation confirmed"
+            url="https://test.com/done", title="Done", content="cancellation confirmed"
         )
 
     @pytest.fixture
@@ -278,12 +293,8 @@ class TestHandleCompleteTask:
             name="test",
             initial_url="https://test.com",
             goal_template="Test",
-            success_indicators=[
-                lambda s: "confirmed" in s.content.lower()
-            ],
-            failure_indicators=[
-                lambda s: "error" in s.content.lower()
-            ],
+            success_indicators=[lambda s: "confirmed" in s.content.lower()],
+            failure_indicators=[lambda s: "error" in s.content.lower()],
         )
 
     @pytest.mark.asyncio
@@ -329,7 +340,7 @@ class TestHandleCompleteTask:
         snap = NormalizedSnapshot(
             url="https://test.com",
             title="Page",
-            content="some other content"  # No success indicator
+            content="some other content",  # No success indicator
         )
         tc = ToolCall(
             id="1",
@@ -356,15 +367,13 @@ class TestVerifyCompletion:
         snap = NormalizedSnapshot(
             url="https://test.com",
             title="Done",
-            content="Your membership has been cancelled"
+            content="Your membership has been cancelled",
         )
         config = ServiceConfig(
             name="test",
             initial_url="u",
             goal_template="g",
-            success_indicators=[
-                lambda s: "cancelled" in s.content.lower()
-            ],
+            success_indicators=[lambda s: "cancelled" in s.content.lower()],
         )
 
         assert runner._verify_completion(snap, config) is True
@@ -372,9 +381,7 @@ class TestVerifyCompletion:
     def test_returns_false_on_failure_indicator(self, runner):
         """Verification fails when failure indicator matches."""
         snap = NormalizedSnapshot(
-            url="https://test.com",
-            title="Error",
-            content="Something went wrong"
+            url="https://test.com", title="Error", content="Something went wrong"
         )
         config = ServiceConfig(
             name="test",
@@ -383,9 +390,7 @@ class TestVerifyCompletion:
             success_indicators=[
                 lambda s: True  # Would pass
             ],
-            failure_indicators=[
-                lambda s: "went wrong" in s.content.lower()
-            ],
+            failure_indicators=[lambda s: "went wrong" in s.content.lower()],
         )
 
         # Failure takes precedence
@@ -394,17 +399,13 @@ class TestVerifyCompletion:
     def test_returns_false_on_no_match(self, runner):
         """Verification fails when no indicators match."""
         snap = NormalizedSnapshot(
-            url="https://test.com",
-            title="Page",
-            content="Some random content"
+            url="https://test.com", title="Page", content="Some random content"
         )
         config = ServiceConfig(
             name="test",
             initial_url="u",
             goal_template="g",
-            success_indicators=[
-                lambda s: "cancelled" in s.content.lower()
-            ],
+            success_indicators=[lambda s: "cancelled" in s.content.lower()],
         )
 
         assert runner._verify_completion(snap, config) is False

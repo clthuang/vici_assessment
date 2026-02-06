@@ -29,7 +29,7 @@ def mock_session(tmp_path: Path) -> SessionLogger:
     return SessionLogger(
         output_dir=tmp_path,
         service="netflix",
-        target="mock"
+        target="mock",
     )
 
 

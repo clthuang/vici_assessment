@@ -1,6 +1,5 @@
 """Unit tests for service registry module."""
 
-
 from subterminator.services.registry import (
     ServiceInfo,
     get_all_services,

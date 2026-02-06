@@ -20,6 +20,7 @@ def test_is_interactive_tty(monkeypatch):
     monkeypatch.delenv("CI", raising=False)
 
     from subterminator.cli.prompts import is_interactive
+
     assert is_interactive() is True
 
 
@@ -39,6 +40,7 @@ def test_is_interactive_no_input_flag(monkeypatch):
     monkeypatch.delenv("CI", raising=False)
 
     from subterminator.cli.prompts import is_interactive
+
     assert is_interactive(no_input_flag=True) is False
 
 
@@ -58,6 +60,7 @@ def test_is_interactive_no_prompts_env(monkeypatch):
     monkeypatch.delenv("CI", raising=False)
 
     from subterminator.cli.prompts import is_interactive
+
     assert is_interactive() is False
 
 
@@ -77,6 +80,7 @@ def test_is_interactive_ci_env(monkeypatch):
     monkeypatch.setenv("CI", "1")
 
     from subterminator.cli.prompts import is_interactive
+
     assert is_interactive() is False
 
 
@@ -96,12 +100,14 @@ def test_is_interactive_not_tty(monkeypatch):
     monkeypatch.delenv("CI", raising=False)
 
     from subterminator.cli.prompts import is_interactive
+
     assert is_interactive() is False
 
 
 def test_show_services_help_output(capsys):
     """Prints formatted service list with [Available]/[Coming Soon]"""
     from subterminator.cli.prompts import show_services_help
+
     show_services_help()
     captured = capsys.readouterr()
     assert "Netflix" in captured.out
@@ -114,6 +120,7 @@ def test_select_service_returns_selection():
     with patch("subterminator.cli.prompts.questionary") as mock_questionary:
         mock_questionary.select.return_value.ask.return_value = "netflix"
         from subterminator.cli.prompts import select_service
+
         assert select_service() == "netflix"
 
 
@@ -122,6 +129,7 @@ def test_select_service_returns_none_on_cancel():
     with patch("subterminator.cli.prompts.questionary") as mock_questionary:
         mock_questionary.select.return_value.ask.return_value = None
         from subterminator.cli.prompts import select_service
+
         assert select_service() is None
 
 
@@ -137,6 +145,7 @@ def test_select_service_help_loop(capsys):
         )
         mock_questionary.Separator = MagicMock(return_value=MagicMock())
         from subterminator.cli.prompts import select_service
+
         result = select_service()
         assert result == "netflix"
         captured = capsys.readouterr()
