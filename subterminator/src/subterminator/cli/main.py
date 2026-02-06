@@ -90,7 +90,7 @@ def cancel(
     model: str | None = typer.Option(
         None,
         "--model",
-        help="LLM model override (default: claude-sonnet-4-20250514)",
+        help="LLM model override (default: claude-opus-4-6)",
     ),
     max_turns: int = typer.Option(
         20,

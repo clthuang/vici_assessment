@@ -172,7 +172,7 @@
 │                      ClaudeActionPlanner                         │
 ├─────────────────────────────────────────────────────────────────┤
 │ - client: anthropic.Anthropic                                   │
-│ - model: str = "claude-sonnet-4-20250514"                       │
+│ - model: str = "claude-opus-4-6"                                │
 │ - timeout: int = 30                                             │
 ├─────────────────────────────────────────────────────────────────┤
 │ + plan_action(context, goal, error_context?) -> ActionPlan      │
@@ -1677,7 +1677,7 @@ class ClaudeActionPlanner:
 
     Attributes:
         client: Anthropic API client.
-        model: Model identifier (default: claude-sonnet-4-20250514).
+        model: Model identifier (default: claude-opus-4-6).
         timeout: API call timeout in seconds (default: 30).
 
     Example:
@@ -1799,7 +1799,7 @@ Analyze the current screenshot and accessibility tree to find an alternative."""
     def __init__(
         self,
         api_key: str | None = None,
-        model: str = "claude-sonnet-4-20250514",
+        model: str = "claude-opus-4-6",
         timeout: int = 30,
     ) -> None:
         """Initialize the planner.

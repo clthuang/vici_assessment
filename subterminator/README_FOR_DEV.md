@@ -169,7 +169,7 @@ class LLMClient:
 **Model selection:**
 1. Explicit `model_name` parameter
 2. `SUBTERMINATOR_MODEL` env var
-3. Default: `claude-sonnet-4-20250514`
+3. Default: `claude-opus-4-6`
 
 #### MCPClient (`mcp_client.py`)
 

@@ -204,7 +204,7 @@ flowchart TD
 | `--no-input` | | `False` | Disable all interactive prompts |
 | `--plain` | | `False` | Disable colors and animations |
 | `--profile-dir` | | auto-detect | Persistent browser profile directory |
-| `--model` | | `claude-sonnet-4-20250514` | LLM model override |
+| `--model` | | `claude-opus-4-6` | LLM model override |
 | `--max-turns` | | `20` | Maximum orchestration turns |
 | `--no-checkpoint` | | `False` | Disable human checkpoints |
 | `--version` | `-v` | | Show version and exit |
@@ -227,7 +227,7 @@ flowchart TD
 | Component | File | Responsibility |
 |-----------|------|----------------|
 | TaskRunner | `mcp_orchestrator/task_runner.py` | Main orchestration loop, virtual tool dispatch, turn management, SIGINT handling |
-| LLMClient | `mcp_orchestrator/llm_client.py` | LangChain-based LLM abstraction; auto-detects Anthropic (`claude-*`) or OpenAI (`gpt-*`) by model name prefix; default model: `claude-sonnet-4-20250514`; retries with exponential backoff (1s, 2s, 4s); 60s timeout |
+| LLMClient | `mcp_orchestrator/llm_client.py` | LangChain-based LLM abstraction; auto-detects Anthropic (`claude-*`) or OpenAI (`gpt-*`) by model name prefix; default model: `claude-opus-4-6`; retries with exponential backoff (1s, 2s, 4s); 60s timeout |
 | MCPClient | `mcp_orchestrator/mcp_client.py` | Playwright MCP server subprocess via stdio transport; validates Node.js >= 18; tool caching; auto-reconnect support |
 | CheckpointHandler | `mcp_orchestrator/checkpoint.py` | Auth edge-case detection (login/captcha/mfa), checkpoint predicate evaluation, screenshot capture, approval UI |
 | SnapshotParser | `mcp_orchestrator/snapshot.py` | Parse `browser_snapshot` markdown output into `NormalizedSnapshot` (url, title, content) |

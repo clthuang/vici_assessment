@@ -74,7 +74,7 @@ subterminator cancel --service netflix --profile-dir ~/.subterminator/chrome-pro
 | `--profile-dir` | | Use persistent browser profile |
 | `--plain` | | Disable colors and animations |
 | `--no-input` | | Force non-interactive mode |
-| `--model` | | LLM model override (default: claude-sonnet-4-20250514) |
+| `--model` | | LLM model override (default: claude-opus-4-6) |
 | `--max-turns` | | Maximum orchestration turns (default: 20) |
 | `--no-checkpoint` | | Disable human checkpoints |
 
@@ -83,7 +83,7 @@ subterminator cancel --service netflix --profile-dir ~/.subterminator/chrome-pro
 | Variable | Description | Default |
 |----------|-------------|---------|
 | `ANTHROPIC_API_KEY` | API key for Claude LLM (required) | (none) |
-| `SUBTERMINATOR_MODEL` | LLM model | `claude-sonnet-4-20250514` |
+| `SUBTERMINATOR_MODEL` | LLM model | `claude-opus-4-6` |
 
 ## What to Expect
 
