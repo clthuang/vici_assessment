@@ -5,9 +5,9 @@ orchestration, including checkpoint conditions, success/failure indicators,
 and service-specific prompts.
 """
 
+from . import netflix  # noqa: F401 — triggers auto-registration of NETFLIX_CONFIG
 from .base import ServiceConfig
 from .registry import ServiceRegistry, default_registry
-from . import netflix  # noqa: F401 — triggers auto-registration of NETFLIX_CONFIG
 
 __all__ = [
     "ServiceConfig",
