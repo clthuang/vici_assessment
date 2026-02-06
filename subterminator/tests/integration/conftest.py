@@ -9,7 +9,7 @@ from dotenv import load_dotenv
 from subterminator.services.mock import MockServer
 
 # Load .env file at test startup
-load_dotenv(Path(__file__).parent.parent.parent / ".env")
+load_dotenv(Path(__file__).parent.parent.parent.parent / ".env")
 
 
 @pytest.fixture(scope="session", autouse=True)

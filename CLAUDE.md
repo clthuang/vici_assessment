@@ -17,7 +17,11 @@ Choose one task to implement:
 ## Project Structure
 
 ```
-docs/prds/    # Product requirements documents
+subterminator/           # SubTerminator CLI project
+  src/subterminator/     # Source code
+  tests/                 # Test suite
+  docs/                  # Documentation & PRDs
+  pyproject.toml         # Project config
 ```
 
 ## Development Guidelines
