@@ -26,7 +26,11 @@ def mock_session(tmp_path: Path) -> SessionLogger:
     Returns:
         SessionLogger: A session logger configured for testing.
     """
-    return SessionLogger(output_dir=tmp_path, service="netflix", target="mock")
+    return SessionLogger(
+        output_dir=tmp_path,
+        service="netflix",
+        target="mock",
+    )
 
 
 @pytest.fixture
