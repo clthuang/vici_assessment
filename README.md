@@ -5,6 +5,8 @@
 
 The [VICI Claude Code 7-Day Challenge](subterminator/docs/prds/VICI%20Claude%20Code%207-Day%20Challenge_%20Jan%202026.pdf) evaluates engineering design thinking, code quality, and AI tool integration. The challenge offers four tasks at varying difficulty levels — this project attempts **all four**.
 
+> **[Assignment Report](ASSIGNMENT_REPORT.md)** — Consolidated report covering all four tasks with executive summary, design decisions, and delivery metrics.
+
 ## Task Overview
 
 | # | Task | Difficulty | Status |
