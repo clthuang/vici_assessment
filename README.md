@@ -11,6 +11,10 @@ subterminator/           # SubTerminator CLI project
   tests/                 # Test suite
   docs/                  # Architecture, features, PRDs
   pyproject.toml         # Project config
+github-claude-skills/    # Claude Code skill plugin
+  .claude-plugin/        # Plugin manifest
+  skills/                # Skill definitions (SKILL.md + references)
+  tests/                 # Validation suite
 ```
 
 ## SubTerminator
@@ -19,6 +23,12 @@ CLI tool that automates subscription cancellation flows using LLM-driven browser
 
 - **Product docs:** [subterminator/README.md](subterminator/README.md)
 - **Developer guide:** [subterminator/README_FOR_DEV.md](subterminator/README_FOR_DEV.md)
+
+## GitHub Claude Skills
+
+Claude Code skill plugin that wraps GitHub CI/CD capabilities as AI-driven skills. The first skill, **GitHub CI/CD Guardian**, diagnoses pipeline failures and audits workflow security for GitHub Actions.
+
+- **Skill docs:** [github-claude-skills/README.md](github-claude-skills/README.md)
 
 ## Tech Stack
 
