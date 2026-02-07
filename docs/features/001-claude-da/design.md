@@ -635,7 +635,7 @@ A standalone script that:
 3. Distributes orders across 6+ calendar months with varied counts
 4. Sets file permissions to read-only (`chmod 444`)
 
-This script is run once during setup, not at runtime. The seeded `demo.db` is committed to the repository (it's small, ~200KB) so setup is zero-step for reviewers.
+This script is run once during setup, not at runtime. The seeded `demo.db` is **not** committed to the repository — git does not preserve file permissions beyond the executable bit, so `chmod 444` would be lost after clone. Instead, the seeder script is one of the 3 quick-start commands.
 
 ---
 
