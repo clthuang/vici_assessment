@@ -1,6 +1,6 @@
 # VICI Assessment
 
-Monorepo for the [VICI Claude Code 7-Day Challenge](subterminator/docs/prds/VICI%20Claude%20Code%207-Day%20Challenge_%20Jan%202026.pdf) assessment. Demonstrates engineering design thinking, code quality, and AI tool integration through a real-world browser automation project.
+Monorepo for the [VICI Claude Code 7-Day Challenge](subterminator/docs/prds/VICI%20Claude%20Code%207-Day%20Challenge_%20Jan%202026.pdf) assessment. Demonstrates engineering design thinking, code quality, and AI tool integration through two projects: a browser automation CLI and a statistical arbitrage backtesting system.
 
 ## Repository Structure
 
@@ -11,6 +11,10 @@ subterminator/           # SubTerminator CLI project
   tests/                 # Test suite
   docs/                  # Architecture, features, PRDs
   pyproject.toml         # Project config
+stock-backtester/        # Stock Backtester project
+  src/stock_backtester/  # Source code
+  tests/                 # Test suite (88 tests, 93% coverage)
+  pyproject.toml         # Project config
 ```
 
 ## SubTerminator
@@ -19,6 +23,12 @@ CLI tool that automates subscription cancellation flows using LLM-driven browser
 
 - **Product docs:** [subterminator/README.md](subterminator/README.md)
 - **Developer guide:** [subterminator/README_FOR_DEV.md](subterminator/README_FOR_DEV.md)
+
+## Stock Backtester
+
+Statistical arbitrage backtesting system with Kelly criterion sizing and Monte Carlo simulation. Runs vectorized backtests over historical price data, computes risk-adjusted metrics, and estimates ruin probability.
+
+- **Product docs:** [stock-backtester/README.md](stock-backtester/README.md)
 
 ## Tech Stack
 
