@@ -104,8 +104,7 @@ class DatabaseSchema:
                 lines.append("Foreign Keys:")
                 for fk in table.foreign_keys:
                     lines.append(
-                        f"  - {fk.from_column} -> "
-                        f"{fk.to_table}.{fk.to_column}"
+                        f"  - {fk.from_column} -> {fk.to_table}.{fk.to_column}"
                     )
 
         lines.append("")
@@ -135,9 +134,7 @@ def discover_schema(db_path: str) -> DatabaseSchema:
     try:
         conn = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True)
     except sqlite3.OperationalError as exc:
-        raise ConfigurationError(
-            f"Cannot open database at '{db_path}': {exc}"
-        ) from exc
+        raise ConfigurationError(f"Cannot open database at '{db_path}': {exc}") from exc
 
     try:
         # Get user table names (skip SQLite internals)
@@ -149,9 +146,7 @@ def discover_schema(db_path: str) -> DatabaseSchema:
         table_names = [row[0] for row in cursor.fetchall()]
 
         if not table_names:
-            raise ConfigurationError(
-                f"Database at '{db_path}' contains no user tables"
-            )
+            raise ConfigurationError(f"Database at '{db_path}' contains no user tables")
 
         tables: list[TableSchema] = []
         for table_name in table_names:
@@ -170,9 +165,7 @@ def discover_schema(db_path: str) -> DatabaseSchema:
         conn.close()
 
 
-def _discover_columns(
-    conn: sqlite3.Connection, table_name: str
-) -> list[ColumnInfo]:
+def _discover_columns(conn: sqlite3.Connection, table_name: str) -> list[ColumnInfo]:
     """Read column metadata for a table via PRAGMA table_info.
 
     Returns:
@@ -240,15 +233,11 @@ def verify_read_only(db_path: str) -> None:
         return
 
     try:
-        conn.execute(
-            "CREATE TABLE _claude_da_write_check (id INTEGER)"
-        )
+        conn.execute("CREATE TABLE _claude_da_write_check (id INTEGER)")
         # If we get here, write succeeded -- database is writable
         conn.execute("DROP TABLE _claude_da_write_check")
         conn.close()
-        raise ConfigurationError(
-            "Database is not read-only. Refusing to start."
-        )
+        raise ConfigurationError("Database is not read-only. Refusing to start.")
     except sqlite3.OperationalError:
         # Write failed as expected -- database is read-only
         conn.close()

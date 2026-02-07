@@ -96,9 +96,7 @@ class TestDiscoverSchema:
     def test_finds_four_tables(self, demo_db: Path) -> None:
         schema = discover_schema(str(demo_db))
         table_names = sorted(t.name for t in schema.tables)
-        assert table_names == [
-            "customers", "order_items", "orders", "products"
-        ]
+        assert table_names == ["customers", "order_items", "orders", "products"]
 
     def test_customers_columns(self, demo_db: Path) -> None:
         schema = discover_schema(str(demo_db))
@@ -203,9 +201,7 @@ class TestVerifyReadOnly:
 
     def test_raises_on_writable_file(self, demo_db: Path) -> None:
         # demo_db is writable by default
-        with pytest.raises(
-            ConfigurationError, match="not read-only"
-        ):
+        with pytest.raises(ConfigurationError, match="not read-only"):
             verify_read_only(str(demo_db))
 
 

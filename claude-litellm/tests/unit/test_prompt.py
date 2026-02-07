@@ -82,16 +82,12 @@ def demo_schema() -> DatabaseSchema:
 class TestPromptSections:
     """The system prompt contains all five required sections."""
 
-    def test_contains_role_definition(
-        self, demo_schema: DatabaseSchema
-    ) -> None:
+    def test_contains_role_definition(self, demo_schema: DatabaseSchema) -> None:
         prompt = build_system_prompt(demo_schema)
         assert "ROLE" in prompt
         assert "data analyst" in prompt
 
-    def test_contains_schema_text(
-        self, demo_schema: DatabaseSchema
-    ) -> None:
+    def test_contains_schema_text(self, demo_schema: DatabaseSchema) -> None:
         prompt = build_system_prompt(demo_schema)
         assert "DATABASE SCHEMA" in prompt
         assert "customers" in prompt
@@ -99,25 +95,19 @@ class TestPromptSections:
         assert "orders" in prompt
         assert "order_items" in prompt
 
-    def test_contains_behavioral_rules(
-        self, demo_schema: DatabaseSchema
-    ) -> None:
+    def test_contains_behavioral_rules(self, demo_schema: DatabaseSchema) -> None:
         prompt = build_system_prompt(demo_schema)
         assert "BEHAVIORAL RULES" in prompt
         assert "insights" in prompt
         assert "trends" in prompt
         assert "50 rows" in prompt
 
-    def test_contains_read_only_instructions(
-        self, demo_schema: DatabaseSchema
-    ) -> None:
+    def test_contains_read_only_instructions(self, demo_schema: DatabaseSchema) -> None:
         prompt = build_system_prompt(demo_schema)
         assert "READ-ONLY" in prompt
         assert "SELECT" in prompt
 
-    def test_contains_non_data_handling(
-        self, demo_schema: DatabaseSchema
-    ) -> None:
+    def test_contains_non_data_handling(self, demo_schema: DatabaseSchema) -> None:
         prompt = build_system_prompt(demo_schema)
         assert "NON-DATA" in prompt
         assert "redirect" in prompt
@@ -126,17 +116,11 @@ class TestPromptSections:
 class TestPromptSize:
     """System prompt respects the 12K character limit."""
 
-    def test_under_12k_chars(
-        self, demo_schema: DatabaseSchema
-    ) -> None:
+    def test_under_12k_chars(self, demo_schema: DatabaseSchema) -> None:
         prompt = build_system_prompt(demo_schema)
-        assert len(prompt) < 12_000, (
-            f"Prompt is {len(prompt)} chars, expected < 12,000"
-        )
+        assert len(prompt) < 12_000, f"Prompt is {len(prompt)} chars, expected < 12,000"
 
-    def test_prompt_is_nonempty(
-        self, demo_schema: DatabaseSchema
-    ) -> None:
+    def test_prompt_is_nonempty(self, demo_schema: DatabaseSchema) -> None:
         prompt = build_system_prompt(demo_schema)
         assert len(prompt) > 100
 

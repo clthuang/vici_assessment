@@ -12,9 +12,7 @@ import sys
 from pathlib import Path
 
 # Add scripts/ to import path so we can import the seeder directly
-_SCRIPTS_DIR = str(
-    Path(__file__).resolve().parent.parent.parent / "scripts"
-)
+_SCRIPTS_DIR = str(Path(__file__).resolve().parent.parent.parent / "scripts")
 if _SCRIPTS_DIR not in sys.path:
     sys.path.insert(0, _SCRIPTS_DIR)
 
@@ -99,8 +97,7 @@ class TestDateDistribution:
 
         distinct_months = len(rows)
         assert distinct_months >= 6, (
-            f"Expected 6+ months, got {distinct_months}: "
-            f"{[r[0] for r in rows]}"
+            f"Expected 6+ months, got {distinct_months}: {[r[0] for r in rows]}"
         )
 
 
@@ -113,8 +110,7 @@ class TestSchemaStructure:
 
         conn = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True)
         tables = conn.execute(
-            "SELECT name FROM sqlite_master WHERE type='table' "
-            "ORDER BY name"
+            "SELECT name FROM sqlite_master WHERE type='table' ORDER BY name"
         ).fetchall()
         conn.close()
 
