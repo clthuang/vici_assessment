@@ -430,3 +430,55 @@ Files to create during implementation:
 | `github-claude-skills/skills/github-cicd-guardian/references/failure-categories.md` | 6 failure categories with log signatures | ~40 |
 
 **Total**: 4 files, ~345 lines.
+
+---
+
+## 7. System Design Diagrams
+
+All diagrams use a colorblind-friendly palette (blue/orange/teal) instead of red/green.
+
+### 7.1 Architecture Overview
+
+Shows the plugin structure, preamble execution flow, and routing to P0/P1 based on user intent.
+
+![Architecture Overview](diagram-architecture.png)
+
+**Color legend:**
+- **Blue** (#4A90D9) — primary components (SKILL.md, start/end nodes, read actions)
+- **Orange** (#E8943A) — secondary components (skill directory, decision points, write actions)
+- **Teal** (#5BB5A2) — reference files (loaded on-demand)
+- **Gray** (#F5F5F5) — neutral / skip actions
+
+### 7.2 P0: Pipeline Failure Diagnosis Flow
+
+Complete 6-step procedure with inputs, tools, outputs, and confirmation requirements at each step. Includes run-ID bypass path and `--log-failed` fallback.
+
+![P0 Diagnosis Flow](diagram-p0-diagnosis-flow.png)
+
+**Step summary with I/O:**
+
+| Step | Input | Tool | Output | Confirm? |
+|------|-------|------|--------|----------|
+| 1. Fetch Status | none (or skip if run ID given) | `gh run list --limit 10` | Run summary table | No |
+| 2. Identify Failure | Run list | Selection logic | run-id | No |
+| 3. Fetch Logs | run-id | `gh run view {id} --log-failed` (fallback: `--log`) | Failure logs | No |
+| 4. Categorize | Logs + references/failure-categories.md | Read | Category + evidence | No |
+| 5. Propose Fix | Category + source files | Read | Explanation + diff + options | No |
+| 6. Apply | User choice | Write/Edit or `gh run rerun` | File modified or run triggered | **Yes** |
+
+### 7.3 P1: Security Audit Flow
+
+Complete 5-step procedure with layered vulnerability checking. Entire flow is read-only -- no confirmation needed at any step.
+
+![P1 Security Audit Flow](diagram-p1-security-audit-flow.png)
+
+**Step summary with I/O:**
+
+| Step | Input | Tool | Output | Confirm? |
+|------|-------|------|--------|----------|
+| 1. Discover Files | none | Glob `.github/workflows/*.yml` | File paths | No |
+| 2. Check zizmor | none | `which zizmor` | Available? | No |
+| 3a. Run zizmor | Workflow paths | `zizmor --format json` | JSON findings | No |
+| 3b. Pattern Checks | Files + references/security-checklist.md | Read | 8 anti-pattern findings | No |
+| 4. Vulnerability Check | Action repos | zizmor data / `gh api` / Claude knowledge | Vulnerability notes | No |
+| 5. Generate Report | All findings | Compile | Critical/Warning/Info + Limitations | No |
