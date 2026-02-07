@@ -12,7 +12,7 @@ The [VICI Claude Code 7-Day Challenge](subterminator/docs/prds/VICI%20Claude%20C
 | 4 | [SubTerminator (Browser Automation)](#task-4-subterminator-browser-automation) | Hard | Completed |
 | 1 | [US Stock Backtesting System](#task-1-us-stock-backtesting-system) | Easy | Not Started |
 | 2 | [Claude CLI → LiteLLM Endpoint](#task-2-claude-cli--litellm-endpoint) | Medium | Not Started |
-| 3 | [GitHub CI/CD → Claude Skills](#task-3-github-cicd--claude-skills) | Medium | Not Started |
+| 3 | [GitHub CI/CD → Claude Skills](#task-3-github-cicd--claude-skills) | Medium | Completed |
 
 ---
 
@@ -48,6 +48,14 @@ uv run subterminator cancel --service netflix --dry-run
 
 ---
 
+## Task 3: GitHub CI/CD → Claude Skills
+
+Claude Code skill plugin that wraps GitHub CI/CD capabilities as AI-driven skills. The first skill, **GitHub CI/CD Guardian**, diagnoses pipeline failures and audits workflow security for GitHub Actions.
+
+- **Skill docs:** [github-claude-skills/README.md](github-claude-skills/README.md)
+
+---
+
 ## Task 1: US Stock Backtesting System
 
 US stock backtesting system (美股回測系統) for evaluating trading strategies against historical market data.
@@ -64,14 +72,6 @@ Wrap the Claude CLI as a LiteLLM-compatible endpoint (封裝 Claude CLI 變成 L
 
 ---
 
-## Task 3: GitHub CI/CD → Claude Skills
-
-Wrap GitHub CI/CD pipelines as Claude Skills (封裝 GitHub CI/CD 成為 Claude Skills), allowing CI/CD workflows to be triggered and managed through Claude.
-
-**Status:** Not Started
-
----
-
 ## Project Structure
 
 ```
@@ -80,6 +80,10 @@ subterminator/           # Task 4: Browser automation tool
   tests/                 #   Test suite
   docs/                  #   Architecture, features, PRDs
   pyproject.toml         #   Project config
+github-claude-skills/    # Task 3: Claude Code skill plugin
+  .claude-plugin/        #   Plugin manifest
+  skills/                #   Skill definitions (SKILL.md + references)
+  tests/                 #   Validation suite
 .github/workflows/       # CI/CD (lint, test, build)
 ```
 
