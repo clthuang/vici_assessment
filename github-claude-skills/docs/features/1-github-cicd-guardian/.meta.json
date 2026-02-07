@@ -1,0 +1,65 @@
+{
+  "id": "1",
+  "slug": "github-cicd-guardian",
+  "mode": "standard",
+  "status": "completed",
+  "completed": "2026-02-07T07:00:00.000Z",
+  "created": "2026-02-07T00:00:00.000Z",
+  "branch": "feature/github-claude-skills",
+  "brainstorm_source": "github-claude-skills/docs/brainstorms/20260207-github-cicd-skill.prd.md",
+  "currentPhase": "finish",
+  "phases": {
+    "specify": {
+      "started": "2026-02-07T00:10:00.000Z",
+      "completed": "2026-02-07T00:25:00.000Z",
+      "iterations": 1,
+      "reviewerNotes": [
+        "All blockers, warnings, and suggestions addressed across 2 review cycles. Spec approved with zero open issues."
+      ]
+    },
+    "implement": {
+      "started": "2026-02-07T05:30:00.000Z",
+      "completed": "2026-02-07T05:50:00.000Z",
+      "iterations": 1,
+      "reviewerNotes": [
+        "All 3 reviewers approved (implementation, quality, security). Security reviewer identified 3 medium-severity improvements (broader prompt injection defense, failed-step-only log fallback, credential redaction in P0 quoting) -- all addressed in iteration 1."
+      ]
+    },
+    "create-tasks": {
+      "started": "2026-02-07T05:00:00.000Z",
+      "completed": "2026-02-07T05:25:00.000Z",
+      "taskReview": {
+        "iterations": 2,
+        "approved": true,
+        "concerns": []
+      },
+      "chainReview": {
+        "approved": true,
+        "concerns": []
+      }
+    },
+    "create-plan": {
+      "started": "2026-02-07T04:30:00.000Z",
+      "completed": "2026-02-07T04:50:00.000Z",
+      "iterations": 1,
+      "reviewerNotes": [
+        "Plan-reviewer flagged 2 blockers (frontmatter format, version field) -- both addressed by adopting Claude Code trigger-phrase format. Phase-reviewer approved with 0 blockers."
+      ]
+    },
+    "finish": {
+      "started": "2026-02-07T06:00:00.000Z",
+      "completed": "2026-02-07T07:00:00.000Z"
+    },
+    "design": {
+      "started": "2026-02-07T01:00:00.000Z",
+      "completed": "2026-02-07T01:35:00.000Z",
+      "stages": {
+        "research": { "started": "2026-02-07T01:00:00.000Z", "completed": "2026-02-07T01:05:00.000Z", "skipped": false },
+        "architecture": { "started": "2026-02-07T01:05:00.000Z", "completed": "2026-02-07T01:15:00.000Z" },
+        "interface": { "started": "2026-02-07T01:15:00.000Z", "completed": "2026-02-07T01:25:00.000Z" },
+        "designReview": { "started": "2026-02-07T01:25:00.000Z", "completed": "2026-02-07T01:30:00.000Z", "iterations": 1, "reviewerNotes": [] },
+        "handoffReview": { "started": "2026-02-07T01:30:00.000Z", "completed": "2026-02-07T01:35:00.000Z", "approved": true, "reviewerNotes": [] }
+      }
+    }
+  }
+}

@@ -1,0 +1,48 @@
+# Test fixture: Workflow with ALL 8 security anti-patterns
+# Used to validate P1 security audit coverage (SM-3, T6)
+# Each anti-pattern is labeled with its checklist item number.
+
+name: Vulnerable CI Pipeline
+on:
+  pull_request_target:  # Anti-pattern #5: pull_request_target trigger
+    branches: [main]
+
+# Anti-pattern #2: No permissions block (overly broad permissions)
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      # Anti-pattern #1: Unpinned action (tag reference)
+      - uses: actions/checkout@v4
+        with:
+          # Anti-pattern #5 (continued): checkout of PR head ref
+          ref: ${{ github.event.pull_request.head.ref }}
+
+      # Anti-pattern #6: Mutable action reference (branch ref)
+      - uses: some-org/some-action@main
+
+      - name: Setup
+        run: |
+          # Anti-pattern #4: Secret in echo
+          echo ${{ secrets.API_KEY }}
+
+      - name: Build
+        run: |
+          # Anti-pattern P1-4 (template injection): Unsanitized event data in run
+          echo "Building PR: ${{ github.event.pull_request.title }}"
+
+      - name: Deploy
+        env:
+          # Anti-pattern #3: Hardcoded secret (AWS access key pattern)
+          AWS_ACCESS_KEY_ID: AKIAIOSFODNN7EXAMPLE
+          # Anti-pattern #3: Hardcoded secret (YAML key pattern)
+          password: my-secret-password
+
+      # Anti-pattern #8: Artifact exposure (uploading entire directory)
+      - uses: actions/upload-artifact@v4
+        with:
+          name: build-output
+          path: .
+
+# Anti-pattern #7 is checked separately: Missing .github/CODEOWNERS

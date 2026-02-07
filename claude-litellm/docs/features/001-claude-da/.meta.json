@@ -1,0 +1,79 @@
+{
+  "id": "001",
+  "slug": "claude-da",
+  "title": "Claude-DA: Natural Language Data Analysis API",
+  "status": "completed",
+  "completed": "2026-02-07T21:00:00Z",
+  "branch": "feature/claude-litellm",
+  "createdAt": "2026-02-07T09:58:47Z",
+  "currentPhase": "finish",
+  "phases": {
+    "brainstorm": {
+      "started": "2026-02-07T09:58:47Z",
+      "completed": "2026-02-07T11:30:00Z",
+      "iterations": 5
+    },
+    "specify": {
+      "started": "2026-02-07T12:00:00Z",
+      "completed": "2026-02-07T13:15:00Z",
+      "iterations": 1,
+      "reviewerNotes": [
+        "30s query timeout mechanism unspecified (design should clarify MCP server native behavior)",
+        "disallowed_tools list narrower than PRD (allowed_tools wildcard handles this implicitly)",
+        "Audit log timing for streaming requests needs clarification at design time",
+        "Exact PyPI package name for Agent SDK should be verified at design time",
+        "Python minimum version and sample LiteLLM proxy config to be determined at design time"
+      ]
+    },
+    "design": {
+      "started": "2026-02-07T13:30:00Z",
+      "completed": "2026-02-07T14:45:00Z",
+      "stages": {
+        "research": { "started": "2026-02-07T13:30:00Z", "completed": "2026-02-07T13:45:00Z", "skipped": false },
+        "architecture": { "started": "2026-02-07T13:45:00Z", "completed": "2026-02-07T14:00:00Z" },
+        "interface": { "started": "2026-02-07T14:00:00Z", "completed": "2026-02-07T14:15:00Z" },
+        "designReview": { "started": "2026-02-07T14:15:00Z", "completed": "2026-02-07T14:30:00Z", "iterations": 1, "reviewerNotes": [] },
+        "handoffReview": { "started": "2026-02-07T14:30:00Z", "completed": "2026-02-07T14:45:00Z", "approved": true, "reviewerNotes": [
+          "agent.py dependency table lists 'prompt' but agent takes system_prompt as string (minor)",
+          "query_timeout spec deviation should be formally acknowledged",
+          "permission_mode value not specified in ClaudeAgentOptions config"
+        ]}
+      }
+    },
+    "create-plan": {
+      "started": "2026-02-07T15:00:00Z",
+      "completed": "2026-02-07T15:50:00Z",
+      "iterations": 2,
+      "reviewerNotes": [
+        "Design Section 2.6 streaming return type updated to match plan (container pattern)",
+        "ResultMessage.usage may be None — handle gracefully in streaming and audit",
+        "Schema text 12K limit is the full prompt limit — schema alone should be tighter",
+        "GenericStreamingChunk may need tool_use: None field for LiteLLM compatibility"
+      ]
+    },
+    "create-tasks": {
+      "started": "2026-02-07T16:00:00Z",
+      "completed": "2026-02-07T16:35:00Z",
+      "taskReview": {
+        "iterations": 1,
+        "approved": true,
+        "concerns": []
+      },
+      "chainReview": {
+        "iterations": 2,
+        "approved": true,
+        "concerns": []
+      }
+    },
+    "implement": {
+      "started": "2026-02-07T16:40:00Z",
+      "completed": "2026-02-07T19:30:00Z",
+      "iterations": 2,
+      "reviewerNotes": []
+    },
+    "finish": {
+      "started": "2026-02-07T20:30:00Z",
+      "completed": "2026-02-07T21:00:00Z"
+    }
+  }
+}

@@ -33,6 +33,20 @@ stock-backtester/        # Stock Backtester project
     cli.py               # CLI entry point (Typer)
   tests/                 # Test suite (88 tests, 93% coverage)
   pyproject.toml         # Project config
+github-claude-skills/    # Claude Code skill plugin
+  .claude-plugin/        # Plugin manifest (plugin.json)
+  skills/                # Skill definitions
+    github-cicd-guardian/ # P0: pipeline diagnosis, P1: security audit
+      SKILL.md           # Skill prompt (trigger phrases + procedures)
+      references/        # failure-categories.md, security-checklist.md
+  tests/                 # Validation suite (validate_skill.sh + fixtures)
+  docs/                  # Architecture, features, brainstorms, knowledge-bank
+claude-litellm/          # Claude-DA data analysis project
+  src/claude_da/         # Source code (agent, provider, schema, config, audit, prompt)
+  tests/                 # Test suite (unit + integration)
+  docs/                  # Technical guide, feature specs, brainstorms
+  scripts/               # Database seeder
+  pyproject.toml         # Project config
 ```
 
 ## Development Guidelines
