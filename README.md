@@ -11,7 +11,7 @@ The [VICI Claude Code 7-Day Challenge](subterminator/docs/prds/VICI%20Claude%20C
 |---|------|------------|--------|
 | 4 | [SubTerminator (Browser Automation)](#task-4-subterminator-browser-automation) | Hard | Completed |
 | 1 | [US Stock Backtesting System](#task-1-us-stock-backtesting-system) | Easy | Not Started |
-| 2 | [Claude CLI → LiteLLM Endpoint](#task-2-claude-cli--litellm-endpoint) | Medium | Not Started |
+| 2 | [Claude CLI → LiteLLM Endpoint](#task-2-claude-cli--litellm-endpoint) | Medium | Completed |
 | 3 | [GitHub CI/CD → Claude Skills](#task-3-github-cicd--claude-skills) | Medium | Completed |
 
 ---
@@ -56,17 +56,19 @@ Claude Code skill plugin that wraps GitHub CI/CD capabilities as AI-driven skill
 
 ---
 
-## Task 1: US Stock Backtesting System
+## Task 2: Claude CLI → LiteLLM Endpoint
 
-US stock backtesting system (美股回測系統) for evaluating trading strategies against historical market data.
+LiteLLM custom provider that wraps the Claude Agent SDK to expose a natural language data analysis API via any OpenAI-compatible endpoint. Point it at a read-only SQLite database and query it in plain English through `/v1/chat/completions`.
 
-**Status:** Not Started
+- **Product docs:** [claude-litellm/README.md](claude-litellm/README.md)
+- **Assessment report:** [claude-litellm/REPORT.md](claude-litellm/REPORT.md)
+- **Technical guide:** [claude-litellm/docs/TECHNICAL_GUIDE.md](claude-litellm/docs/TECHNICAL_GUIDE.md)
 
 ---
 
-## Task 2: Claude CLI → LiteLLM Endpoint
+## Task 1: US Stock Backtesting System
 
-Wrap the Claude CLI as a LiteLLM-compatible endpoint (封裝 Claude CLI 變成 LiteLLM endpoint), enabling Claude Code to be used as a backend through the OpenAI-compatible API.
+US stock backtesting system (美股回測系統) for evaluating trading strategies against historical market data.
 
 **Status:** Not Started
 
@@ -84,15 +86,30 @@ github-claude-skills/    # Task 3: Claude Code skill plugin
   .claude-plugin/        #   Plugin manifest
   skills/                #   Skill definitions (SKILL.md + references)
   tests/                 #   Validation suite
+claude-litellm/          # Task 2: Claude-DA data analysis
+  src/claude_da/         #   Source code
+  tests/                 #   Test suite (unit + integration)
+  docs/                  #   Technical guide, features, brainstorms
+  scripts/               #   Database seeder
+  pyproject.toml         #   Project config
 .github/workflows/       # CI/CD (lint, test, build)
 ```
 
 ## Tech Stack
 
+### SubTerminator
 - Python 3.12+, [uv](https://github.com/astral-sh/uv)
 - [Typer](https://typer.tiangolo.com/) CLI framework
 - Claude API (LLM orchestration) via LangChain
 - [Playwright MCP](https://github.com/anthropics/mcp) for browser control
+
+### Claude-DA
+- Python 3.11+, [uv](https://github.com/astral-sh/uv)
+- [LiteLLM](https://github.com/BerriAI/litellm) custom provider
+- [Claude Agent SDK](https://github.com/anthropics/claude-code-sdk-python) with MCP SQLite server
+- Structured JSONL audit logging
+
+### Shared
 - GitHub Actions CI/CD
 
 ## License

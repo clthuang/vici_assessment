@@ -1,0 +1,9 @@
+model_list:
+  - model_name: claude-da/analyst
+    litellm_params:
+      model: claude-da/analyst
+
+litellm_settings:
+  custom_provider_map:
+    - provider: claude-da
+      custom_handler: claude_da.provider.claude_da_provider

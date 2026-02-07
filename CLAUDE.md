@@ -27,6 +27,12 @@ github-claude-skills/    # Claude Code skill plugin
       references/        # failure-categories.md, security-checklist.md
   tests/                 # Validation suite (validate_skill.sh + fixtures)
   docs/                  # Architecture, features, brainstorms, knowledge-bank
+claude-litellm/          # Claude-DA data analysis project
+  src/claude_da/         # Source code (agent, provider, schema, config, audit, prompt)
+  tests/                 # Test suite (unit + integration)
+  docs/                  # Technical guide, feature specs, brainstorms
+  scripts/               # Database seeder
+  pyproject.toml         # Project config
 ```
 
 ## Development Guidelines
