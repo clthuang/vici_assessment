@@ -19,6 +19,14 @@ subterminator/           # SubTerminator CLI project
   tests/                 # Test suite (unit + integration)
   docs/                  # Architecture, features, PRDs
   pyproject.toml         # Project config
+github-claude-skills/    # Claude Code skill plugin
+  .claude-plugin/        # Plugin manifest (plugin.json)
+  skills/                # Skill definitions
+    github-cicd-guardian/ # P0: pipeline diagnosis, P1: security audit
+      SKILL.md           # Skill prompt (trigger phrases + procedures)
+      references/        # failure-categories.md, security-checklist.md
+  tests/                 # Validation suite (validate_skill.sh + fixtures)
+  docs/                  # Architecture, features, brainstorms, knowledge-bank
 ```
 
 ## Development Guidelines
