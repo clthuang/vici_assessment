@@ -1,0 +1,15 @@
+{
+  "id": "001",
+  "slug": "stat-arb-backtester",
+  "mode": "standard",
+  "status": "active",
+  "created": "2026-02-07T00:00:00Z",
+  "branch": "feature/001-stat-arb-backtester",
+  "brainstorm_source": "stock-backtester/docs/brainstorms/2026-02-07-stat-arb-backtester.prd.md",
+  "currentPhase": null,
+  "phases": {
+    "specify": {
+      "started": "2026-02-07T00:00:00Z"
+    }
+  }
+}
