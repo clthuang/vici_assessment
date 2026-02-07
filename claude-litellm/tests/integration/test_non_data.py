@@ -28,9 +28,7 @@ async def test_non_data_question_no_sql() -> None:
     prompt = build_system_prompt(schema)
     agent = DataAnalystAgent(config, prompt)
 
-    result = await agent.run(
-        [{"role": "user", "content": "What's 2+2?"}]
-    )
+    result = await agent.run([{"role": "user", "content": "What's 2+2?"}])
 
     assert result.response_text, "Should provide a conversational response"
     assert len(result.sql_queries) == 0, "Should not execute SQL for non-data question"

@@ -302,9 +302,7 @@ class DataAnalystAgent:
                             tool_call_count += 1
 
             elif isinstance(message, ResultMessage):
-                result_metadata = _build_result_metadata(
-                    message, self._config.model
-                )
+                result_metadata = _build_result_metadata(message, self._config.model)
 
             else:
                 query_results.extend(_extract_tool_results(message))
@@ -368,9 +366,7 @@ class DataAnalystAgent:
                             tool_call_count += 1
 
             elif isinstance(message, ResultMessage):
-                result_metadata = _build_result_metadata(
-                    message, self._config.model
-                )
+                result_metadata = _build_result_metadata(message, self._config.model)
                 result_metadata.tool_call_count = tool_call_count
 
             else:
