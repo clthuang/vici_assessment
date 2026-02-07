@@ -1,7 +1,7 @@
 # PRD: Statistical Arbitrage Backtesting System
 
 **Date:** 2026-02-07
-**Status:** Draft (v5 — all reviewer warnings addressed, frontier numbers verified)
+**Status:** Draft (v6 — multi-symbol equal-weight MVP, strategy-minimal scope)
 **VICI Challenge:** Task 1 (Easy) - US Stock Backtesting System (美股回測系統)
 
 ---
@@ -16,7 +16,7 @@ Three pillars:
 2. **Kelly/Ruin Analysis** — Critical Kelly fractions for survival-aware position sizing
 3. **Monte Carlo Simulation** — Synthetic price paths to map strategy survival envelopes
 
-**MVP note**: The MVP demonstrates the engine architecture and Kelly analysis using a single-asset SMA strategy as proof-of-concept. Statistical arbitrage (pairs trading with cointegration) is the North Star application. The three-pillar architecture, semantic contracts, and mathematical framework are designed for stat arb from day one — the MVP validates the foundation before adding strategy complexity.
+**MVP note**: The MVP exercises the multi-asset portfolio engine with the simplest possible strategy: equal-weight allocation across a user-specified basket of US stocks. The engine processes `{symbol: weight}` vectors — the same interface that pairs trading, factor models, and all stat arb strategies use. Strategy complexity is deliberately minimal (equal-weight, no signals) so the value stays where it belongs: engine correctness, cost modeling, Kelly analysis, and Monte Carlo simulation.
 
 ### Why This Approach
 
@@ -134,26 +134,26 @@ These decisions shape the architecture. Reading them first provides context for 
 %%{init: {'theme': 'dark', 'themeVariables': {'primaryColor': '#1a1a2e', 'lineColor': '#aaaaaa', 'textColor': '#e0e0e0'}}}%%
 flowchart TD
     SP[Strategy + Params] --> DL
-    UT[Symbol + Date Range] --> DL
+    UT[Symbols + Date Range] --> DL
 
-    DL[DATA LAYER<br>Fetch OHLCV from yfinance<br>Validate prices]
+    DL[DATA LAYER<br>Fetch OHLCV per symbol<br>Align dates, validate]
 
-    DL -- DataFrame OHLCV --> HB
-    DL -- DataFrame OHLCV --> CA
-    DL -- DataFrame --> VE
+    DL -- Multi-symbol OHLCV --> HB
+    DL -- Multi-symbol OHLCV --> CA
+    DL -- Multi-symbol OHLCV --> VE
 
-    CA[CALIBRATION<br>Method of moments<br>Estimate mu and sigma]
+    CA[CALIBRATION<br>Method of moments<br>Estimate mu and sigma<br>from portfolio returns]
     CA -- mu sigma --> SE
 
     HB[HISTORICAL BACKTEST<br>Uses real price data]
-    SE[GBM SIMULATOR<br>Generates N=200<br>synthetic paths]
+    SE[GBM SIMULATOR<br>Generates N=200<br>synthetic paths per symbol]
     VE[VERIFICATION<br>Generates synthetic data<br>with KNOWN answer]
 
     HB --> SL
     SE --> SL
     VE --> SL
 
-    SL[STRATEGY LAYER<br>In: OHLCV DataFrame<br>Out: target weights per date<br>Engine enforces shift of 1]
+    SL[STRATEGY LAYER<br>In: Multi-symbol OHLCV<br>Out: weight vector per date<br>Engine enforces shift of 1]
 
     SL -- target weights shifted --> EM
 
@@ -190,8 +190,8 @@ flowchart TD
 
 | Boundary | Semantic | Invariant |
 |----------|----------|-----------|
-| Data → Strategy | "Here is everything that has happened up to today" | No future data leaks through this interface. DataFrame passed as copy, not view — prevents accidental mutation by strategy code |
-| Strategy → Engine | "Here is what I want to hold tomorrow" | Weights are intentions, not executed positions |
+| Data → Strategy | "Here is everything that has happened up to today for all symbols" | No future data leaks through this interface. DataFrames passed as copies, not views — prevents accidental mutation by strategy code |
+| Strategy → Engine | "Here is what I want to hold tomorrow across all symbols" | Weight vector `{symbol: weight}` — intentions, not executed positions. Weights should sum to <= 1.0 (unlevered) |
 | Engine shift(1) | "Yesterday's intention becomes today's execution" | Temporal gap enforced mechanically by engine, not by strategy discipline |
 | Engine → Execution Model | "Execute these weight changes at today's prices" | Costs are applied pessimistically; net <= gross always |
 | Returns → Kelly Analyzer | "Here is the realized return stream" | Edge and volatility estimated from the SAME returns the strategy produced. Warmup-period bars (zero position) are excluded — only active trading bars contribute to Kelly estimation |
@@ -328,9 +328,9 @@ This section describes the complete product. The MVP assessment version (below) 
 
 ### Scope Philosophy
 
-**Simplest possible implementation that proves the architecture works.** The MVP is a demo: one strategy, one data source, closed-form math only. No bootstrap, no regime-switching, no walk-forward. Every pillar is present, but at its simplest viable form. The North Star above documents where each component goes next.
+**Simplest possible strategy that exercises the real multi-asset interface.** The MVP is a demo: trivial strategies, one data source, closed-form math only. No bootstrap, no regime-switching, no walk-forward. Every pillar is present, but at its simplest viable form. The North Star above documents where each component goes next.
 
-The MVP does not implement statistical arbitrage directly — it uses a single-asset SMA strategy to validate the engine, execution model, and Kelly framework. The architecture (target weights abstraction, shift(1) enforcement, pluggable strategy base class) is designed so that adding pairs trading requires only a new strategy subclass, not engine changes. This is a deliberate architectural choice: interfaces are designed for multi-asset from day one, but MVP exercises them with a single asset.
+The MVP uses equal-weight allocation across a user-specified basket of US stocks. Strategy complexity is deliberately minimal — the engine processes `{symbol: weight}` vectors from day one, the same interface that pairs trading, factor models, and all stat arb strategies use. Adding a new strategy (SMA, pairs, momentum) requires only a new strategy subclass, not engine changes. The value is in the backtesting infrastructure, not the signal.
 
 ### Non-Goals (MVP)
 
@@ -338,21 +338,21 @@ The following are explicitly out of scope for the MVP. Each is a deliberate deci
 
 - **Not HFT**: No tick data, no order book, no latency modeling (see Decision 1)
 - **Not event-driven**: No event loop, no tick-by-tick processing (see Decision 2)
-- **Not multi-asset**: Single stock at a time, no portfolio optimization (see L2, L11)
-- **Not pairs trading**: SMA only — stat arb is the North Star application (see L2)
+- **Not signal-driven**: No SMA, momentum, mean-reversion, or cointegration signals — strategies are trivial by design. Signal complexity is a North Star concern
+- **Not portfolio-optimized**: Equal-weight only — no mean-variance, Black-Litterman, or risk parity (see L11)
 - **Not live trading**: No broker integration, no order execution, no real-time feeds
 - **Not production data infrastructure**: No caching, no PIT data, no data vendor integrations (see L1, L13)
 
 ### What's In
 
-#### Engine (Pillar 1 — Single Strategy Demo)
-- **Data**: Yahoo Finance only (yfinance). Uses adjusted close prices (split- and dividend-adjusted) by default. Single data source, no pluggable interface yet
-- **Universe**: 1 stock at a time (single-asset SMA strategy)
-- **Strategy**: 1 built-in (SMA crossover). Custom strategy via base class for extensibility proof
-- **Execution**: Vectorized engine with enforced shift(1). Slippage = k * trailing volatility (see Slippage Model in Mathematical Specification). Flat commission (default: $0.001/share)
-- **Warmup handling**: The first N_slow bars produce no signal (insufficient data for slow MA). Engine skips warmup bars and begins execution on the first bar with a valid signal. The initial position change (from 0 to first target weight) is treated as a trade and incurs slippage and commission
-- **Data validation**: NaN check, positive price check. Errors on invalid data rather than producing silent garbage
-- **Metrics**: Sharpe, Sortino (downside deviation uses MAR=0, computed over all returns not just negative ones), max drawdown, annualized return, annualized volatility, win rate
+#### Engine (Pillar 1 — Multi-Asset Portfolio Demo)
+- **Data**: Yahoo Finance only (yfinance). Fetches adjusted OHLCV per symbol independently. Aligns symbols on inner join of trading dates (only dates where ALL symbols traded). Single data source, no pluggable interface yet
+- **Universe**: User-specified basket of US stocks (e.g., `AAPL,MSFT,GOOG,AMZN`). Minimum 1 symbol, no upper limit (practical limit ~50 given yfinance rate limits)
+- **Strategy**: 2 built-in (EqualWeight, AlwaysLong). Custom strategy via base class for extensibility proof
+- **Execution**: Vectorized engine with enforced shift(1). Portfolio return = sum of (weight_i * return_i) per bar. Slippage and commission applied per-symbol based on weight changes. Flat commission (default: $0.001/share)
+- **Warmup handling**: EqualWeight has warmup=0 (immediate signal). For strategies with warmup, engine skips warmup bars and begins execution on the first bar with valid weights. The initial position change (from 0 to first target weights) is treated as a trade and incurs slippage and commission per symbol
+- **Data validation**: NaN check, positive price check per symbol. Errors on invalid data rather than producing silent garbage
+- **Metrics**: Sharpe, Sortino (downside deviation uses MAR=0, computed over all returns not just negative ones), max drawdown, annualized return, annualized volatility, win rate — all computed on the portfolio return series
 - **Survivorship warning**: Every report includes: "Data source: yfinance (survivorship-biased)"
 
 #### Kelly/Ruin (Pillar 2 — Closed-Form Only)
@@ -371,7 +371,7 @@ The following are explicitly out of scope for the MVP. Each is a deliberate deci
 
 The binary is named `backtest` (installed via pyproject.toml entry point). Three subcommands:
 
-- `backtest run` — Run SMA strategy on historical data, output metrics + Kelly analysis
+- `backtest run` — Run strategy on historical data for a basket of symbols, output metrics + Kelly analysis
 - `backtest simulate` — Run strategy on GBM-simulated data, compare empirical vs. theoretical ruin
 - `backtest verify` — Run known-answer tests to verify engine correctness
 
@@ -379,23 +379,31 @@ Default output is CLI table to stdout. `--json` flag outputs JSON to stdout inst
 
 ### Built-in Strategy Specification
 
-#### SMA Crossover
-- **Signal**: fast_MA(close, N_fast) > slow_MA(close, N_slow) then long; else flat
-- **Parameters**: N_fast (default: 20), N_slow (default: 50)
-- **Weights**: `{symbol: 1.0}` when long, `{symbol: 0.0}` when flat
-- **Single-asset**: Operates on one symbol at a time
+#### EqualWeight (default)
+- **Signal**: constant — always hold equal weight in all symbols
+- **Parameters**: none
+- **Weights**: `{sym: 1/N for sym in symbols}` every bar
+- **Warmup**: 0 bars
+- **Multi-asset**: Operates on N symbols simultaneously. This is the DeMiguel et al. (2009) 1/N benchmark — shown to outperform most optimizers out of sample
+
+#### AlwaysLong
+- **Signal**: constant — always hold 100% in each symbol equally (identical to EqualWeight but provided as a named alias for clarity in single-symbol mode)
+- **Parameters**: none
+- **Weights**: `{sym: 1/N}` for all symbols (degenerates to `{symbol: 1.0}` for single-symbol)
+- **Warmup**: 0 bars
+- **Use case**: single-symbol degenerate case, AC-1/AC-2 test fixture
 
 ### Acceptance Criteria
 
 #### Engine
 
 **AC-1: Historical backtest produces correct returns**
-- Given: synthetic price series where stock rises 1% every day for 10 days
-- When: run with a strategy that is always long with weight 1.0, zero slippage, zero commission
+- Given: synthetic price series where a single stock rises 1% every day for 10 days
+- When: run with AlwaysLong strategy (single symbol, weight 1.0), zero slippage, zero commission
 - Then: total return equals (1.01^10 - 1) = 10.46% within floating-point tolerance (1e-10)
 
 **AC-2: Look-ahead prevention verified**
-- Given: a "perfect foresight" strategy that returns weight=1.0 on days before price increases, weight=0.0 otherwise
+- Given: a "perfect foresight" strategy that returns weight=1.0 on days before price increases, weight=0.0 otherwise (single symbol)
 - When: engine applies shift(1) and runs backtest
 - Then: returns are consistent with 1-day-delayed execution, NOT same-day. Strategy return is strictly less than sum of all positive daily returns
 
@@ -423,9 +431,9 @@ Default output is CLI table to stdout. `--json` flag outputs JSON to stdout inst
 - **Determinism note**: With 200 paths and 2-SE tolerance, there is an expected ~5% false failure rate from sampling noise. For CI/automated tests, use a fixed default seed (e.g., seed=42) to ensure deterministic pass/fail. For ad-hoc runs, re-run once before investigating failures
 
 **AC-7: Known-answer verification passes**
-- Given: synthetic GBM data with mu=0, sigma=0.20 (zero-edge), fixed seed
-- When: any strategy runs
-- Then: expected Sharpe within 2 standard errors of zero. Engine does not create phantom returns
+- Given: synthetic GBM data with mu=0, sigma=0.20 (zero-edge), fixed seed, multiple symbols
+- When: EqualWeight strategy runs on multi-symbol synthetic paths
+- Then: expected Sharpe within 2 standard errors of zero. Engine does not create phantom returns from portfolio construction
 - **Determinism note**: Same fixed-seed policy as AC-6
 
 ### Acknowledged MVP Limitations
@@ -435,7 +443,7 @@ These are known trade-offs accepted for the demo version. Each maps to a specifi
 | # | Limitation | Impact | North Star Resolution |
 |---|-----------|--------|----------------------|
 | L1 | Single data source (yfinance) — survivorship-biased, not point-in-time | Results overstate strategy performance | Pluggable data interface supporting CRSP, Parquet, CSV |
-| L2 | No pairs trading — SMA only | Cannot demo stat arb directly | Pairs trading with cointegration, hedge ratio methods (OLS, TLS, Johansen) |
+| L2 | No signal-driven strategies — equal-weight only | Cannot demo alpha generation directly | SMA, momentum, pairs trading with cointegration, hedge ratio methods (OLS, TLS, Johansen) |
 | L3 | No bootstrap CI on Kelly | Cannot quantify f* estimation uncertainty | Bootstrap CI (1,000 resamples) showing how sensitive Kelly is to mu estimation error |
 | L4 | No walk-forward validation | Cannot detect overfitting or OOS degradation | Rolling/anchored walk-forward with OOS degradation ratio |
 | L5 | No regime-switching simulation | Cannot stress-test strategy across market regimes | 2-state Markov with EM calibration, regime-conditional Kelly |
@@ -444,7 +452,7 @@ These are known trade-offs accepted for the demo version. Each maps to a specifi
 | L8 | No turnover reporting | Cannot assess friction drag at scale | Annualized turnover + turnover-adjusted return |
 | L9 | GBM only (no fat tails, no vol clustering) | Simulation underestimates tail risk | Regime-switching, GARCH, Heston, Merton Jump Diffusion |
 | L10 | Slippage = k * sigma only (no order-size impact) | Underestimates costs for large positions | Square-root impact model (Almgren-Chriss), per-asset-class calibration |
-| L11 | No multi-strategy Kelly | Cannot optimize across correlated strategies | Portfolio-level Kelly with correlation-aware sizing |
+| L11 | No portfolio optimization | Equal-weight only, no mean-variance or risk parity | Portfolio-level Kelly with correlation-aware sizing, mean-variance optimization |
 | L12 | No structural break detection | Cannot detect regime changes in historical data | CUSUM, Bai-Perron non-parametric tests |
 | L13 | No data caching | Repeated runs re-fetch from yfinance (slow, rate-limit risk) | Local Parquet cache keyed by ticker + date range |
 | L14 | Minimal data validation (NaN + positivity only) | May miss subtle data issues (splits, gaps, zero volume) | Full validation suite: >50% gap detection, zero-volume filtering, adjustment verification |
@@ -456,7 +464,7 @@ These are known trade-offs accepted for the demo version. Each maps to a specifi
 ### For VICI Assessment
 
 1. All 7 acceptance criteria (AC-1 through AC-7) pass
-2. `backtest run` produces a complete report on real US stock data
+2. `backtest run` produces a complete report on a multi-stock portfolio
 3. `backtest simulate` runs strategy on GBM-simulated data with ruin comparison
 4. `backtest verify` passes all known-answer tests
 5. Code is clean, well-tested, type-checked, linted
@@ -467,20 +475,24 @@ These are known trade-offs accepted for the demo version. Each maps to a specifi
 *Note: numbers below are illustrative output format only. Actual values depend on market data and strategy parameters.*
 
 ```
-$ backtest run --strategy sma --symbol AAPL --start 2019-01-01 --end 2024-01-01
+$ backtest run --symbols AAPL,MSFT,GOOG,AMZN --start 2019-01-01 --end 2024-01-01
 
 WARNING: Data source: yfinance (survivorship-biased). Results may overstate performance.
 
+── Portfolio: EqualWeight (4 symbols) ──
+Symbols: AAPL, MSFT, GOOG, AMZN
+Strategy: equal-weight (25.0% each)
+
 ── Historical Performance ──
-Sharpe: 0.82 | Sortino: 1.14 | Annual Return: 11.3%
-Max Drawdown: -18.7% (duration: 62 days)
-Annualized Vol: 13.8% | Win Rate: 48.1%
-Gross Return: 12.9% | Net Return: 11.3% | Cost Drag: 1.6%
+Sharpe: 0.94 | Sortino: 1.28 | Annual Return: 18.7%
+Max Drawdown: -22.3% (duration: 47 days)
+Annualized Vol: 19.9% | Win Rate: 52.4%
+Gross Return: 19.8% | Net Return: 18.7% | Cost Drag: 1.1%
 
 ── Kelly Analysis ──
-Estimated edge (mu): 0.045%/day | Volatility (sigma): 0.87%/day
-Full Kelly (f*): 5.9x | Half Kelly: 2.95x
-Critical Kelly (1% ruin, 50% DD): 0.42x
+Estimated edge (mu): 0.074%/day | Volatility (sigma): 1.26%/day
+Full Kelly (f*): 4.7x | Half Kelly: 2.35x
+Critical Kelly (1% ruin, 50% DD): 0.38x
 
 ── Capital Efficiency Frontier (50% drawdown) ──
 Fraction  | Growth (% of max) | P(ruin)
@@ -494,11 +506,11 @@ Fraction  | Growth (% of max) | P(ruin)
   Formula: P(ruin) = D^(2/alpha - 1) where alpha = f/f*, D = drawdown level
   At half-Kelly (alpha=0.5): P = 0.50^3 = 12.5%
 
-$ backtest simulate --strategy sma --symbol AAPL --paths 200
+$ backtest simulate --symbols AAPL,MSFT,GOOG,AMZN --paths 200
 
-── Simulation Results (200 GBM paths, 50% drawdown) ──
-Empirical ruin rate at half-Kelly: 13.8% (theoretical: 12.5%)
-  NOTE: GBM assumes no fat tails. Real ruin risk likely higher.
+── Simulation Results (200 GBM paths, 4 symbols, 50% drawdown) ──
+Empirical ruin rate at half-Kelly: 11.5% (theoretical: 12.5%)
+  NOTE: GBM assumes independent symbols. Real correlations may increase tail risk.
 
 $ backtest verify
 
@@ -631,8 +643,8 @@ This is a simplification — the full model would include order size via the squ
 
 | Input | Description | Default | Example |
 |-------|-------------|---------|---------|
-| **Strategy** | Which strategy + parameters | `sma` | `sma --fast 20 --slow 50` |
-| **Symbol** | A US stock ticker | (required) | `AAPL` |
+| **Strategy** | Which strategy | `equal-weight` | `equal-weight` or `always-long` |
+| **Symbols** | Comma-separated US stock tickers | (required) | `AAPL,MSFT,GOOG,AMZN` |
 | **Date range** | Historical period | Last 5 years | `--start 2019-01-01 --end 2024-01-01` |
 | **Commission** | Per-share commission | $0.001 | `--commission 0.005` |
 | **Slippage multiplier** | k in slippage = k * trailing vol | 0.5 | `--slippage-k 1.0` |
@@ -664,23 +676,23 @@ This is a simplification — the full model would include order size via the squ
 
 | Day | Focus | Deliverable |
 |-----|-------|------------|
-| **Day 1** | Project scaffolding + Data layer | pyproject.toml, CLI skeleton, yfinance data loader with validation. Data layer tests pass |
-| **Day 2** | Engine core + Execution model | Vectorized engine with shift(1), slippage model, commission. AC-1, AC-2, AC-3 pass |
-| **Day 3** | SMA strategy + Metrics | SMA crossover strategy. Sharpe, Sortino, max drawdown, return/vol, win rate. End-to-end `backtest run` works |
-| **Day 4** | Kelly/Ruin analyzer | Forward Kelly, reverse Kelly solver (closed-form), capital efficiency frontier. AC-4, AC-5 pass |
+| **Day 1** | Project scaffolding + Data layer | pyproject.toml, CLI skeleton, multi-symbol yfinance data loader with validation and date alignment. Data layer tests pass |
+| **Day 2** | Engine core + Execution model | Multi-asset vectorized engine with shift(1), portfolio return computation, slippage model, commission. AC-1, AC-2, AC-3 pass |
+| **Day 3** | Strategies + Metrics | EqualWeight and AlwaysLong strategies. Sharpe, Sortino, max drawdown, return/vol, win rate on portfolio returns. End-to-end `backtest run` works |
+| **Day 4** | Kelly/Ruin analyzer | Forward Kelly, reverse Kelly solver (closed-form), capital efficiency frontier on portfolio returns. AC-4, AC-5 pass |
 | **Day 5** | GBM Simulation + Verification | GBM path generation, Monte Carlo backtest loop, empirical ruin comparison, known-answer tests. AC-6, AC-7 pass |
 | **Day 6** | Integration + Polish | CLI integration (`run`, `simulate`, `verify`), report formatting (CLI tables + JSON), survivorship warning, JSON export |
 | **Day 7** | Buffer + Documentation | README, run full demo on real data (AAPL), fix bugs. Final verification of all 7 ACs. If ahead of schedule: add bootstrap CI on Kelly (L3) as highest-value North Star feature |
 
 ### Priority Order (if forced to cut)
 
-1. **Must ship**: Engine (AC-1, AC-2, AC-3) + SMA strategy + basic metrics + Kelly analyzer (AC-4, AC-5)
+1. **Must ship**: Multi-asset engine (AC-1, AC-2, AC-3) + EqualWeight/AlwaysLong strategies + basic metrics + Kelly analyzer (AC-4, AC-5)
 2. **Should ship**: GBM simulation (AC-6) + known-answer verification (AC-7) + JSON export
 3. **Nice to have**: Polished CLI formatting, comprehensive error messages
 
 ### Minimum Shippable Product (absolute floor)
 
-Engine with SMA strategy + Kelly closed-form analysis. No simulation. This still demonstrates: correct engine, statistical rigor (Kelly), and engineering discipline (shift(1) verification).
+Multi-asset engine with EqualWeight strategy + Kelly closed-form analysis. No simulation. This still demonstrates: correct multi-asset engine, statistical rigor (Kelly), and engineering discipline (shift(1) verification).
 
 ---
 
@@ -720,9 +732,9 @@ Engine with SMA strategy + Kelly closed-form analysis. No simulation. This still
 
 **The problem**: Three pillars in 7 days, even at demo scope.
 
-**Mitigation**: MVP is already aggressively trimmed: 1 strategy (SMA), 1 data source (yfinance), closed-form Kelly only, GBM only. See Timeline above. Priority: Engine → Kelly → Simulation.
+**Mitigation**: MVP is already aggressively trimmed: 2 trivial strategies (EqualWeight, AlwaysLong), 1 data source (yfinance), closed-form Kelly only, GBM only. See Timeline above. Priority: Engine → Kelly → Simulation.
 
-**Minimum shippable product** (if everything goes wrong): Engine with SMA strategy + Kelly closed-form analysis. No simulation. This still demonstrates correct engine + statistical rigor.
+**Minimum shippable product** (if everything goes wrong): Multi-asset engine with EqualWeight strategy + Kelly closed-form analysis. No simulation. This still demonstrates correct engine + statistical rigor.
 
 ### Risk 5: Data Quality (Severity: MEDIUM)
 
@@ -753,8 +765,8 @@ Engine with SMA strategy + Kelly closed-form analysis. No simulation. This still
 
 | Requirement | Target |
 |-------------|--------|
-| Single historical backtest (1 stock, 5 years) | < 2 seconds |
-| Monte Carlo simulation (200 paths, 1 strategy, 5 years) | < 1 minute |
+| Single historical backtest (4 stocks, 5 years) | < 5 seconds |
+| Monte Carlo simulation (200 paths, 4 stocks, 5 years) | < 2 minutes |
 | Memory usage | < 500 MB |
 | All known-answer tests | < 30 seconds total |
 

@@ -1,8 +1,8 @@
 # Specification: Statistical Arbitrage Backtesting System
 
 **Feature:** 001-stat-arb-backtester
-**PRD Version:** v5
-**Spec Version:** v2 (reviewer blockers addressed)
+**PRD Version:** v6
+**Spec Version:** v4
 
 ---
 
@@ -29,21 +29,21 @@ stock_backtester/
 
 ```
 cli (orchestrator)
- ├── data        → fetch prices
- ├── strategy    → create strategy
- ├── engine      → run backtest
- ├── metrics     → compute metrics from returns
- ├── kelly       → compute Kelly from returns
- ├── simulation  → run Monte Carlo
+ ├── data        → fetch multi-symbol prices, align dates
+ ├── strategy    → create strategy (EqualWeight / AlwaysLong)
+ ├── engine      → run multi-asset backtest → portfolio returns
+ ├── metrics     → compute metrics from portfolio returns
+ ├── kelly       → compute Kelly from portfolio returns
+ ├── simulation  → run multi-symbol Monte Carlo
  └── report      → format output (takes result types, no computation)
 
 engine
- ├── execution   → compute costs
- └── strategy    → call compute_weights (protocol only)
+ ├── execution   → compute simple returns, per-symbol costs, aggregate to portfolio
+ └── strategy    → call compute_weights → weight DataFrame
 
 simulation
- ├── data        → calibrate from historical
- └── engine      → reuse backtest logic per path
+ ├── data        → calibrate per-symbol from historical
+ └── engine      → reuse backtest logic per path set
 ```
 
 **Invariant**: No circular imports. `types.py` is imported by all modules but imports none. `report.py` depends only on `types.py` — it formats data but never calls computation modules.
@@ -68,11 +68,11 @@ class OutputFormat(Enum):
 @dataclass(frozen=True)
 class BacktestConfig:
     """Immutable configuration for a single backtest run."""
-    symbol: str
+    symbols: list[str]                 # e.g. ["AAPL", "MSFT", "GOOG", "AMZN"]
     start_date: str                    # ISO format YYYY-MM-DD
     end_date: str                      # ISO format YYYY-MM-DD
-    strategy_name: str                 # e.g. "sma"
-    strategy_params: dict[str, float]  # e.g. {"fast": 20, "slow": 50}
+    strategy_name: str                 # e.g. "equal-weight"
+    strategy_params: dict[str, float]  # strategy-specific params (empty for EqualWeight)
     commission_per_share: float        # default 0.001
     slippage_k: float                  # default 0.5
     ruin_threshold: float              # default 0.01
@@ -83,7 +83,7 @@ class BacktestConfig:
 @dataclass(frozen=True)
 class SimulationConfig:
     """Immutable configuration for Monte Carlo simulation."""
-    symbol: str
+    symbols: list[str]
     start_date: str
     end_date: str
     strategy_name: str
@@ -99,24 +99,25 @@ class SimulationConfig:
 
 @dataclass(frozen=True)
 class PriceData:
-    """Validated OHLCV data. Immutable after construction."""
-    df: pd.DataFrame  # columns: date(index), open, high, low, close, volume
-    symbol: str
-    source: str       # "yfinance"
-    adjusted: bool    # True = split+dividend adjusted close
+    """Validated multi-symbol OHLCV data. Immutable after construction."""
+    prices: dict[str, pd.DataFrame]  # {symbol: DataFrame} each with date(index), open, high, low, close, volume
+    symbols: list[str]               # ordered list of symbols
+    source: str                      # "yfinance"
+    adjusted: bool                   # Always True in MVP (auto_adjust=True hardcoded)
+    aligned_dates: pd.DatetimeIndex  # common trading dates (inner join)
 
 
 @dataclass(frozen=True)
 class BacktestResult:
     """Complete result of a single backtest run."""
     config: BacktestConfig
-    gross_returns: pd.Series       # daily gross returns (post-shift, pre-cost)
-    net_returns: pd.Series         # daily net returns (post-cost)
-    positions: pd.Series           # daily position weights (after shift)
-    slippage_costs: pd.Series      # daily slippage cost
-    commission_costs: pd.Series    # daily commission cost
+    gross_returns: pd.Series       # daily gross PORTFOLIO returns (post-shift, pre-cost)
+    net_returns: pd.Series         # daily net PORTFOLIO returns (post-cost)
+    weights: pd.DataFrame          # daily weight matrix (dates × symbols, after shift)
+    slippage_costs: pd.Series      # daily total slippage cost (summed across symbols)
+    commission_costs: pd.Series    # daily total commission cost (summed across symbols)
     equity_curve: pd.Series        # cumulative portfolio value
-    warmup_end_idx: int            # index of first active trading bar
+    warmup_end_idx: int            # positional index (iloc) of first active trading bar
 
 
 @dataclass(frozen=True)
@@ -161,10 +162,9 @@ class SimulationResult:
     """Monte Carlo simulation output."""
     n_paths: int
     seed: int
-    mu_calibrated: float           # annualized
-    sigma_calibrated: float        # annualized
+    per_symbol_calibrations: dict[str, tuple[float, float]]  # {sym: (mu_annual, sigma_annual)}
     empirical_ruin_rate: float     # at half-Kelly
-    theoretical_ruin_rate: float   # from formula
+    theoretical_ruin_rate: float   # from formula (using portfolio-level mu/sigma)
     path_results: list[BacktestResult] | None  # None if not stored
 
 
@@ -185,64 +185,87 @@ class VerificationResult:
 
 ### 3.1 Data Layer (`data.py`)
 
-**Responsibility**: Fetch and validate OHLCV price data.
+**Responsibility**: Fetch, validate, and align multi-symbol OHLCV price data.
 
 ```python
-def fetch_prices(symbol: str, start_date: str, end_date: str) -> PriceData:
+def fetch_prices(symbols: list[str], start_date: str, end_date: str) -> PriceData:
     """
-    Fetch daily OHLCV data from yfinance.
+    Fetch daily OHLCV data for multiple symbols from yfinance.
 
-    Uses yf.download(symbol, start, end, auto_adjust=True).
+    Fetches each symbol individually via yf.download(symbol, start, end,
+    auto_adjust=True). Individual downloads are used (not batch) to avoid
+    the MultiIndex column structure that yfinance returns for multi-ticker
+    batch downloads, which complicates column access.
+
     With auto_adjust=True (the yfinance default), ALL OHLCV columns
     are split- and dividend-adjusted. There is NO separate 'Adj Close'
     column — the 'Close' column IS the adjusted close.
+
+    After fetching all symbols, aligns on inner join of trading dates
+    (only dates where ALL symbols have data). This handles different
+    IPO dates, halts, and delistings by keeping only common dates.
 
     Default date range: if start is None, defaults to 5 years before end.
     If end is None, defaults to today. If both None, (today - 5yr, today).
 
     Args:
-        symbol: US stock ticker (e.g., "AAPL")
+        symbols: list of US stock tickers (e.g., ["AAPL", "MSFT", "GOOG"])
         start_date: ISO date string "YYYY-MM-DD" or None
         end_date: ISO date string "YYYY-MM-DD" or None
 
     Returns:
-        PriceData with validated DataFrame
+        PriceData with validated per-symbol DataFrames and aligned dates
 
     Raises:
+        DataError("No symbols provided")
+            if symbols list is empty
         DataError("No data for ticker {symbol}. Check symbol and date range")
-            if yfinance returns empty DataFrame
-        DataError("No trading days in range")
-            if date range contains zero trading days
-        DataError("Invalid prices: NaN detected at {dates}")
+            if yfinance returns empty DataFrame for any symbol
+        DataError("No common trading days across symbols")
+            if inner join of dates produces zero rows
+        DataError("Invalid prices: NaN detected in {symbol} at {dates}")
             if any close prices are NaN after fetch
-        DataError("Invalid prices: non-positive values at {dates}")
+        DataError("Invalid prices: non-positive values in {symbol} at {dates}")
             if any close prices are <= 0
         DataError("Insufficient data for reliable estimation. Need at least 30 trading days")
-            if fewer than 30 bars returned
+            if fewer than 30 aligned bars
 
     Contract:
-        - DataFrame index is DatetimeIndex, sorted ascending
+        - Column names normalized to lowercase after fetch:
+          df.columns = df.columns.str.lower()
+          (yfinance returns capitalized: Open, High, Low, Close, Volume)
+        - Each per-symbol DataFrame index is DatetimeIndex, sorted ascending
         - Columns: open, high, low, close, volume (all float64)
         - ALL OHLCV columns are adjusted (auto_adjust=True)
-        - No NaN values in close column
-        - All close values > 0
+        - No NaN values in close column for any symbol
+        - All close values > 0 for all symbols
+        - aligned_dates = inner join of all symbols' trading dates
+        - All per-symbol DataFrames are reindexed to aligned_dates
         - source = "yfinance", adjusted = True
-
-    Note: validate_prices checks total data length (>= 30 bars).
-    The Kelly analyzer has a separate check for post-warmup bars
-    (>= 30 active trading bars), which may require more total data
-    depending on strategy warmup period.
     """
 
 
-def validate_prices(df: pd.DataFrame) -> None:
+def validate_prices(df: pd.DataFrame, symbol: str) -> None:
     """
-    Validate price DataFrame. Raises DataError on failure.
+    Validate price DataFrame for a single symbol. Raises DataError on failure.
 
     Checks:
         1. No NaN in close column
         2. All close > 0
         3. At least 30 bars (minimum for reliable estimation)
+    """
+
+
+def align_dates(price_dfs: dict[str, pd.DataFrame]) -> pd.DatetimeIndex:
+    """
+    Compute inner join of trading dates across all symbols.
+
+    Returns:
+        DatetimeIndex of dates present in ALL symbol DataFrames.
+
+    Raises:
+        DataError("No common trading days across symbols")
+            if intersection is empty
     """
 
 
@@ -253,7 +276,7 @@ class DataError(Exception):
 
 ### 3.2 Strategy Layer (`strategy.py`)
 
-**Responsibility**: Compute target weights from price data. Strategies are stateless functions of price history.
+**Responsibility**: Compute target weight vectors from multi-symbol price data. Strategies are stateless functions of price history.
 
 ```python
 from abc import ABC, abstractmethod
@@ -264,26 +287,31 @@ class Strategy(ABC):
     Base class for all strategies.
 
     Contract:
-        - compute_weights() receives a COPY of price data (not a view)
-        - Returns Series of target weights indexed by date
-        - Weights are intentions: 1.0 = fully long, 0.0 = flat
-        - NaN weights are forbidden — raise StrategyError
+        - compute_weights() receives COPIES of price data (not views)
+        - Returns DataFrame of target weights: dates × symbols
+        - Weights are intentions: {AAPL: 0.25, MSFT: 0.25, ...}
+        - Weights should sum to <= 1.0 per bar (unlevered)
+        - NaN weight rows in the warmup period are acceptable —
+          the engine will identify and skip them
         - Strategy must NOT apply shift — the engine handles temporal alignment
     """
 
     @abstractmethod
-    def compute_weights(self, prices: pd.DataFrame) -> pd.Series:
+    def compute_weights(
+        self, prices: dict[str, pd.DataFrame], symbols: list[str]
+    ) -> pd.DataFrame:
         """
-        Compute target position weights for each date.
+        Compute target position weight vectors for each date.
 
         Args:
-            prices: DataFrame with columns [open, high, low, close, volume]
-                    This is a COPY — mutations do not affect the original.
+            prices: {symbol: DataFrame} each with columns
+                    [open, high, low, close, volume].
+                    These are COPIES — mutations do not affect the original.
+            symbols: ordered list of symbols
 
         Returns:
-            Series indexed by date with float weights.
-            NaN values in the warmup period are acceptable —
-            the engine will identify and skip them.
+            DataFrame indexed by date, columns = symbols, values = float weights.
+            NaN rows in the warmup period are acceptable.
 
         Raises:
             StrategyError if computation fails
@@ -295,49 +323,60 @@ class Strategy(ABC):
         """Number of initial bars needed before first valid signal."""
 
 
-class SMAStrategy(Strategy):
+class EqualWeightStrategy(Strategy):
     """
-    Simple Moving Average crossover strategy.
+    Equal-weight (1/N) allocation across all symbols.
 
-    Signal: fast_MA > slow_MA → long (weight=1.0), else flat (weight=0.0)
+    The DeMiguel et al. (2009) benchmark. No signal computation —
+    always holds equal weight in every symbol.
 
-    Parameters:
-        fast_period: int (default 20)
-        slow_period: int (default 50)
-
-    warmup_bars = slow_period (need slow_period bars for slow MA)
+    warmup_bars = 0 (immediate signal)
     """
 
-    def __init__(self, fast_period: int = 20, slow_period: int = 50) -> None:
-        """
-        Raises:
-            ValueError if fast_period >= slow_period
-            ValueError if either period < 2
-        """
-
-    def compute_weights(self, prices: pd.DataFrame) -> pd.Series:
+    def compute_weights(
+        self, prices: dict[str, pd.DataFrame], symbols: list[str]
+    ) -> pd.DataFrame:
         """
         Returns:
-            Series with NaN for first slow_period-1 bars (warmup),
-            then 1.0 (long) or 0.0 (flat) for remaining bars.
+            DataFrame where every cell = 1/N (N = number of symbols).
+            No NaN values. Index = aligned dates from any symbol's DataFrame.
 
         Implementation:
-            fast_ma = prices["close"].rolling(fast_period).mean()
-            slow_ma = prices["close"].rolling(slow_period).mean()
-            signal = (fast_ma > slow_ma).astype(float)
-            # First slow_period-1 values are NaN from rolling
+            n = len(symbols)
+            dates = next(iter(prices.values())).index
+            return pd.DataFrame(1.0 / n, index=dates, columns=symbols)
         """
 
     @property
     def warmup_bars(self) -> int:
+        return 0
+
+
+class AlwaysLongStrategy(Strategy):
+    """
+    Always hold equal weight in all symbols. Functionally identical to
+    EqualWeightStrategy — exists as a named alias for semantic clarity:
+    - "equal-weight" is the user-facing strategy name (CLI default)
+    - "always-long" is the test fixture name (AC-1, AC-2)
+    This avoids a single class serving dual roles with confusing naming.
+
+    warmup_bars = 0 (immediate signal)
+
+    Note: For single-symbol use, this degenerates to weight=1.0.
+    """
+
+    def compute_weights(
+        self, prices: dict[str, pd.DataFrame], symbols: list[str]
+    ) -> pd.DataFrame:
         """
-        warmup_bars = slow_period means the strategy needs slow_period bars
-        before producing a valid signal. The first valid (non-NaN) weight
-        is at bar index slow_period-1. After engine shift(1), the first
-        executed position is at bar index slow_period. Therefore,
-        warmup_end_idx in BacktestResult = slow_period.
+        Returns:
+            DataFrame where every cell = 1/N.
+            Identical to EqualWeightStrategy.
         """
-        return self.slow_period
+
+    @property
+    def warmup_bars(self) -> int:
+        return 0
 
 
 def get_strategy(name: str, params: dict[str, float]) -> Strategy:
@@ -345,8 +384,8 @@ def get_strategy(name: str, params: dict[str, float]) -> Strategy:
     Factory function. Returns strategy instance.
 
     Args:
-        name: "sma" (only option in MVP)
-        params: {"fast": 20, "slow": 50} (defaults if missing)
+        name: "equal-weight" or "always-long" (MVP options)
+        params: strategy-specific params (empty dict for both MVP strategies)
 
     Raises:
         StrategyError(f"Unknown strategy: {name}")
@@ -359,129 +398,188 @@ class StrategyError(Exception):
 
 ### 3.3 Backtesting Engine (`engine.py`)
 
-**Responsibility**: Orchestrate the backtest pipeline. Enforces shift(1) as the single temporal alignment point.
+**Responsibility**: Orchestrate the multi-asset backtest pipeline. Enforces shift(1) as the single temporal alignment point. Computes portfolio returns from weight vectors.
 
 ```python
 def run_backtest(
+    config: BacktestConfig,
     prices: PriceData,
     strategy: Strategy,
     slippage_k: float = 0.5,
     commission_per_share: float = 0.001,
 ) -> BacktestResult:
     """
-    Run a vectorized backtest with enforced look-ahead prevention.
+    Run a vectorized multi-asset backtest with enforced look-ahead prevention.
 
     Pipeline:
-        1. Pass prices.df.copy() to strategy.compute_weights()
-        2. Apply shift(1) to raw weights → executed weights
-        3. Compute daily log-returns: r_t = ln(P_t / P_{t-1})
-        4. Compute gross returns: gross_t = position_t * r_t
-        5. Compute slippage and commission costs via execution model
-           (all costs in fractional units, same as log-returns)
-        6. Compute net returns: net_t = gross_t - slippage_t - commission_t
-        7. Build equity curve: equity = exp(cumsum(net_returns)), normalized to 1.0
+        1. Pass {sym: df.copy()} to strategy.compute_weights()
+           → returns DataFrame of weights (dates × symbols)
+        2. Apply shift(1) to raw weight DataFrame → executed weights
+        3. Compute per-symbol daily SIMPLE returns: R_{t,i} = P_{t,i}/P_{t-1,i} - 1
+           → returns DataFrame (dates × symbols)
+        4. Compute gross portfolio SIMPLE return per bar:
+           R_p,t = sum_i(w_{t,i} * R_{t,i})
+           (weighted sum of simple returns is exact for portfolio aggregation)
+        5. Convert to portfolio LOG-return:
+           r_p,t = ln(1 + R_p,t)
+           NOTE: Weighted sum of log-returns ≠ portfolio log-return. Cross-sectional
+           aggregation MUST use simple returns. This is a well-known mathematical
+           property: ln(sum(w_i * exp(r_i))) ≠ sum(w_i * r_i) due to Jensen's
+           inequality. The error is always negative and compounds over time.
+        6. Compute slippage and commission costs via execution model
+           (per-symbol weight changes, summed to portfolio-level cost)
+        7. Compute net returns: net_t = r_p,t - slippage_t - commission_t
+           (costs are small enough that subtracting from log-returns is a valid
+           first-order approximation; for costs > 1% per bar, this breaks down)
+        8. Build equity curve: equity = exp(cumsum(net_returns)), normalized to 1.0
            Since net_returns are log-returns, exp(cumsum) correctly compounds.
 
     Shift(1) contract:
-        - Raw weights from strategy represent "what I want to hold tomorrow"
-        - shift(1) makes them "what I hold today based on yesterday's signal"
+        - Raw weight DataFrame from strategy represents "what I want to hold tomorrow"
+        - shift(1) makes it "what I hold today based on yesterday's signal"
         - This is applied ONCE, HERE, in the engine — nowhere else
-        - The first bar after shift has NaN weight → treated as 0 (flat)
+        - The first row after shift has NaN weights → treated as 0 (flat in all symbols)
 
     Warmup handling:
-        - Identify warmup_end_idx: first bar where shifted weight is not NaN
-        - All bars before warmup_end_idx have position = 0, return = 0
-        - The transition from 0 to first target weight IS a trade
-          (incurs slippage and commission)
+        - Identify warmup_end_idx: first bar where shifted weights are not NaN
+        - All bars before warmup_end_idx have all positions = 0, return = 0
+        - The transition from 0 to first target weights IS a trade
+          (incurs slippage and commission per symbol)
 
     Args:
-        prices: Validated PriceData
+        config: BacktestConfig (embedded in BacktestResult for provenance)
+        prices: Validated PriceData (multi-symbol)
         strategy: Strategy instance
         slippage_k: multiplier for volatility-based slippage
         commission_per_share: flat per-share commission
 
     Returns:
-        BacktestResult with all return series and metadata
+        BacktestResult with portfolio return series and weight matrix
 
     Invariants:
-        - len(gross_returns) == len(net_returns) == len(prices.df)
+        - len(gross_returns) == len(net_returns) == len(prices.aligned_dates)
         - net_returns[i] <= gross_returns[i] for all i where trading occurs
-        - positions are always the SHIFTED weights (no look-ahead)
+        - weights are always the SHIFTED weight matrix (no look-ahead)
     """
 ```
 
 ### 3.4 Execution Model (`execution.py`)
 
-**Responsibility**: Apply transaction costs to weight changes.
+**Responsibility**: Apply transaction costs to per-symbol weight changes, aggregated to portfolio level. Also provides return computation utilities (simple and log) used by the engine and simulation modules. These live here rather than in a separate utils module because they are tightly coupled to the execution/cost model (trailing volatility needs log-returns, portfolio aggregation needs simple returns).
 
 ```python
 def compute_costs(
-    prices: pd.DataFrame,
-    positions: pd.Series,
+    prices: PriceData,
+    weights: pd.DataFrame,
     slippage_k: float,
     commission_per_share: float,
 ) -> tuple[pd.Series, pd.Series]:
     """
-    Compute slippage and commission costs for each bar.
+    Compute slippage and commission costs for each bar, summed across symbols.
 
     All costs are expressed as FRACTIONAL costs (dimensionless, same
     units as log-returns) so they can be directly subtracted from
     gross returns: net_return_t = gross_return_t - slippage_t - commission_t.
 
+    For each symbol i on each bar t:
+
     Slippage model:
-        slippage_t = k * sigma_trailing(20) * |delta_w_t|
+        slippage_{t,i} = k * sigma_trailing_i(20) * |delta_w_{t,i}|
 
         where:
             k = slippage multiplier (default 0.5, dimensionless)
-            sigma_trailing(20) = std of most recent 20 daily log-returns
-                                 (dimensionless fraction, NOT annualized)
-            delta_w_t = w_t - w_{t-1} (weight change, dimensionless)
+            sigma_trailing_i(20) = std of symbol i's most recent 20 daily
+                                   log-returns (dimensionless, NOT annualized)
+            delta_w_{t,i} = w_{t,i} - w_{t-1,i} (weight change for symbol i)
 
-        Result: dimensionless fraction of portfolio value.
-
-    Trailing volatility edge cases:
-        - If fewer than 20 bars available, use all available bars (min 2)
-        - If trailing vol is 0 (halted stock, constant price), slippage = 0
-          (acceptable for MVP; no artificial floor needed since k*0 = 0
-           and constant-price stocks have no return to distort)
+        This is a first-order approximation valid when:
+            - Individual slippage terms are small (< 0.5% per bar)
+            - Weight changes are modest (typical for daily rebalance)
+        For large weight swings (e.g., 0→1 on first trade), the linear
+        model overstates cost vs a square-root impact model. Accepted for MVP.
 
     Commission model:
-        commission_t = commission_rate * |delta_w_t|
+        commission_{t,i} = commission_rate_i * |delta_w_{t,i}|
 
-        where commission_rate = commission_per_share / close_price_t.
+        where commission_rate_i = commission_per_share / close_price_{t,i}.
         This converts the per-share cost into a fractional cost.
 
         Dimensional analysis:
             commission_per_share: $/share
-            close_price_t: $/share
-            commission_rate = ($/share) / ($/share) = dimensionless
-            commission_t = dimensionless * dimensionless = dimensionless ✓
+            close_price_{t,i}: $/share
+            commission_rate = ($/share) / ($/share) = dimensionless ✓
 
-        Example: commission=$0.001/share, close=$150 → rate=0.00067%
-        With |delta_w|=1.0 (full position change): cost = 0.00067%
+        Economic mapping: commission_per_share is a user-facing parameter
+        (e.g., $0.001/share for IBKR Pro). The division by close_price
+        converts it to a fractional cost so it can be applied to
+        weight-based position changes. For a $100 stock with $0.001/share
+        commission, the fractional rate is 0.001% per unit weight change.
+
+    Portfolio-level aggregation:
+        slippage_t = sum_i(slippage_{t,i})
+        commission_t = sum_i(commission_{t,i})
+
+    Trailing volatility edge cases:
+        - If fewer than 20 bars available, use all available bars (min 2)
+        - If trailing vol is 0 (halted stock, constant price), slippage = 0
+          for that symbol
 
     Args:
-        prices: DataFrame with 'close' column
-        positions: Series of position weights (already shifted)
+        prices: PriceData with per-symbol DataFrames
+        weights: DataFrame of position weights (dates × symbols, already shifted)
         slippage_k: multiplier (default 0.5)
         commission_per_share: per-share cost (default 0.001)
 
     Returns:
-        (slippage_costs, commission_costs) — both non-negative Series,
-        in fractional units (same as log-returns)
+        (slippage_costs, commission_costs) — both non-negative Series
+        indexed by date, in fractional units (same as log-returns).
+        These are portfolio-level totals (summed across symbols).
 
     Invariants:
         - slippage_costs >= 0 for all bars
         - commission_costs >= 0 for all bars
-        - costs are 0 when position does not change
+        - costs are 0 when no position changes in any symbol
+    """
+
+
+def compute_simple_returns(prices: pd.DataFrame) -> pd.Series:
+    """
+    Compute daily simple returns for a single symbol: R_t = P_t/P_{t-1} - 1.
+
+    Used by engine for cross-sectional portfolio aggregation (Step 3-4).
+
+    Returns Series with first value = NaN (no prior price).
+    """
+
+
+def compute_multi_symbol_simple_returns(prices: PriceData) -> pd.DataFrame:
+    """
+    Compute daily simple returns for all symbols.
+
+    Used by engine for portfolio return computation:
+        R_p,t = sum_i(w_{t,i} * R_{t,i})
+
+    Returns DataFrame (dates × symbols) with first row = NaN.
     """
 
 
 def compute_log_returns(prices: pd.DataFrame) -> pd.Series:
     """
-    Compute daily log-returns: r_t = ln(P_t / P_{t-1}).
+    Compute daily log-returns for a single symbol: r_t = ln(P_t / P_{t-1}).
+
+    Used by execution model (trailing volatility) and simulation (calibration).
 
     Returns Series with first value = NaN (no prior price).
+    """
+
+
+def compute_multi_symbol_log_returns(prices: PriceData) -> pd.DataFrame:
+    """
+    Compute daily log-returns for all symbols.
+
+    Used by simulation for per-symbol GBM calibration.
+
+    Returns DataFrame (dates × symbols) with first row = NaN.
     """
 
 
@@ -489,7 +587,7 @@ def compute_trailing_volatility(
     log_returns: pd.Series, window: int = 20
 ) -> pd.Series:
     """
-    Rolling standard deviation of log-returns.
+    Rolling standard deviation of log-returns for a single symbol.
 
     If fewer than `window` bars available at the start,
     uses expanding window with minimum 2 observations.
@@ -512,18 +610,27 @@ def compute_metrics(
     All computations use post-warmup returns ONLY.
     The warmup period (bars 0..warmup_end_idx-1) is excluded.
 
-    Metric definitions:
+    Metric definitions (all use ARITHMETIC mean/std of daily log net returns):
 
-    Sharpe:
+    Sharpe (arithmetic, ex-post):
         annualized_return / annualized_volatility
-        where annualized_return = mean(net_daily) * 252
-              annualized_volatility = std(net_daily) * sqrt(252)
+        where annualized_return = mean(net_daily) * 252  (arithmetic mean of log-returns)
+              annualized_volatility = std(net_daily, ddof=1) * sqrt(252)
+
+        NOTE: Sharpe uses ddof=1 (sample std) because it is an inferential
+        statistic estimating population Sharpe. Kelly uses ddof=0 (population
+        std) because the continuous Kelly formula uses population parameters.
+        NOTE: The Sharpe numerator (mean * 252) differs from the displayed
+        Annualized Return metric (exp(mean*252) - 1). The former is standard
+        for log-return-based Sharpe; the latter converts to percentage for
+        user readability. They are equivalent for small daily returns.
 
     Sortino:
         annualized_return / annualized_downside_deviation
         where downside_deviation = sqrt((1/N) * sum(min(r_t, 0)^2))
               MAR = 0
-              N = total bar count (all returns, not just negative)
+              N = total bar count (full-count convention per Sortino 2001,
+                  NOT just downside observations)
               annualized_DD = DD_daily * sqrt(252)
 
     Max Drawdown:
@@ -664,23 +771,24 @@ class KellyError(Exception):
 
 ### 3.7 Monte Carlo Simulation (`simulation.py`)
 
-**Responsibility**: GBM path generation, moment-matching calibration, Monte Carlo backtest loop.
+**Responsibility**: Multi-symbol GBM path generation, moment-matching calibration, Monte Carlo backtest loop.
 
 ```python
-def calibrate_gbm(prices: PriceData) -> tuple[float, float]:
+def calibrate_gbm(prices: PriceData) -> dict[str, tuple[float, float]]:
     """
-    Method-of-moments calibration from historical data.
+    Method-of-moments calibration from historical data, per symbol.
 
-    Compute daily log-returns: r_t = ln(P_t / P_{t-1})
-    mu_daily = mean(r_t)
-    sigma_daily = std(r_t)
+    For each symbol:
+        Compute daily log-returns: r_t = ln(P_t / P_{t-1})
+        mu_daily = mean(r_t)
+        sigma_daily = std(r_t, ddof=1)  # sample std for unbiased estimate
 
-    Annualize:
-        mu_annual = mu_daily * 252
-        sigma_annual = sigma_daily * sqrt(252)
+        Annualize:
+            mu_annual = mu_daily * 252
+            sigma_annual = sigma_daily * sqrt(252)
 
     Returns:
-        (mu_annual, sigma_annual)
+        {symbol: (mu_annual, sigma_annual)} for each symbol
     """
 
 
@@ -693,7 +801,7 @@ def generate_gbm_paths(
     S0: float = 100.0,
 ) -> NDArray[np.float64]:
     """
-    Generate GBM price paths.
+    Generate GBM price paths for a single symbol.
 
     For each path i, each day t:
         S_{t+1} = S_t * exp((mu - sigma^2/2)*dt + sigma*sqrt(dt)*Z)
@@ -716,25 +824,58 @@ def generate_gbm_paths(
     """
 
 
+def generate_multi_symbol_paths(
+    calibrations: dict[str, tuple[float, float]],
+    n_paths: int,
+    n_days: int,
+    seed: int,
+) -> dict[str, NDArray[np.float64]]:
+    """
+    Generate independent GBM paths for each symbol.
+
+    Each symbol gets its own set of n_paths paths using deterministic
+    sub-seeds derived from the master seed: sub_seed_i = seed + i.
+    This ensures adding/removing a symbol doesn't change other symbols' paths.
+
+    NOTE: Symbols are simulated independently (no correlation structure).
+    This is a simplification — real assets are correlated. Accepted for
+    MVP; the North Star adds factor model / copula correlation.
+
+    Returns:
+        {symbol: ndarray(n_paths, n_days+1)} for each symbol
+    """
+
+
 def run_monte_carlo(
     prices: PriceData,
     strategy: Strategy,
     config: SimulationConfig,
 ) -> SimulationResult:
     """
-    Monte Carlo backtest loop.
+    Multi-symbol Monte Carlo backtest loop.
 
     Pipeline:
-        1. Calibrate GBM from historical prices
-        2. Generate n_paths synthetic price paths
-        3. For each path:
-           a. Convert ndarray to PriceData-compatible DataFrame
+        1. Calibrate GBM per symbol from historical prices
+        2. Generate n_paths synthetic price paths per symbol
+        3. For each path index p:
+           a. For each symbol, extract path p → construct per-symbol DataFrame
            b. Synthetic DataFrames: close=simulated price, open=high=low=close,
               volume=1e6 (constant placeholder), dates=pd.bdate_range(n_days)
-           c. Run backtest with same strategy and cost parameters
-           c. Check if equity curve hits drawdown_level at half-Kelly sizing
+              Columns are lowercase (matching data layer contract).
+              Synthetic data is NOT passed through fetch_prices validation
+              but conforms to the same DataFrame schema (Section 4.1).
+           c. Assemble into PriceData with all symbols
+           d. Run backtest with same strategy and cost parameters
+           e. Check if equity curve hits drawdown_level at half-Kelly sizing
         4. Compute empirical ruin rate = count(ruin) / n_paths
         5. Compute theoretical ruin rate from formula at half-Kelly
+           (using portfolio-level mu and sigma from historical backtest)
+
+    Half-Kelly source:
+        Before the Monte Carlo loop, run compute_kelly() on the HISTORICAL
+        backtest's net returns to obtain half_kelly. This is the same value
+        the user sees in the backtest report. The simulation tests whether
+        the historical half-Kelly survives under GBM-simulated conditions.
 
     Ruin detection for each path:
         Scale net returns by (half_kelly / 1.0) to simulate leveraged returns.
@@ -747,19 +888,39 @@ def run_monte_carlo(
         empirical ruin rate. Accepted for MVP; the North Star
         cost-leverage interaction model addresses this.
 
+        NOTE: Independent GBM per symbol ignores cross-asset correlation.
+        This may underestimate tail risk for correlated portfolios.
+
     Returns:
-        SimulationResult with empirical and theoretical ruin rates
+        SimulationResult with empirical and theoretical ruin rates.
+        theoretical_ruin_rate uses portfolio-level mu_daily and sigma_daily
+        from the historical backtest's net returns (same values as compute_kelly),
+        NOT from the per-symbol GBM calibration parameters.
     """
+
+
+class SimulationError(Exception):
+    """Raised for simulation failures (NaN/Inf in paths, invalid parameters)."""
+    pass
 
 
 def run_verification_tests(seed: int = 42) -> list[VerificationResult]:
     """
     Run all known-answer verification tests.
 
-    AC-1: Deterministic 1% daily rise, always-long, zero cost
+    Note: This function lives in simulation.py because it depends on
+    GBM path generation (AC-6, AC-7) and the backtest engine. It is
+    the only non-simulation function in this module — accepted because
+    creating a separate verification module for one function adds
+    unnecessary file count.
+
+    AC-1: Deterministic 1% daily rise, single symbol, AlwaysLong, zero cost
         Expected total return: (1.01^10 - 1) = 10.4622...%
 
-    AC-2: Perfect foresight strategy with shift(1)
+    AC-1b: Multi-symbol portfolio return (2 symbols, known simple returns)
+        Validates simple-return aggregation vs incorrect log-return aggregation
+
+    AC-2: Perfect foresight strategy with shift(1), single symbol
         Verify return < sum of all positive daily returns
 
     AC-3: Slippage invariant (net < gross)
@@ -769,13 +930,14 @@ def run_verification_tests(seed: int = 42) -> list[VerificationResult]:
 
     AC-5: Frontier consistency (monotonic ruin, g(2f*)=0)
 
-    AC-6: GBM moment matching
+    AC-6: GBM moment matching (single symbol for moment test)
         mu=0.10/yr, sigma=0.20/yr, 200 paths, 252 days
         Check: mean log-return within 2 SE of (mu-sigma^2/2)*T
         Check: std of log-returns within 2 SE of sigma*sqrt(T)
 
-    AC-7: Zero-edge GBM (mu=0, sigma=0.20)
-        Check: Sharpe within 2 SE of zero
+    AC-7: Zero-edge GBM, multi-symbol (4 symbols, mu=0 each)
+        Run EqualWeight strategy on 4-symbol zero-edge paths
+        Check: portfolio Sharpe within 2 SE of zero
 
     Returns:
         List of VerificationResult, one per AC
@@ -798,6 +960,7 @@ def format_backtest_report(
 
     TABLE format:
         Survivorship warning (always first, non-suppressible)
+        Portfolio summary: symbols, strategy name, weight allocation
         Historical Performance section:
             Sharpe, Sortino, Annual Return (annualized net),
             Max Drawdown (with duration in days),
@@ -861,36 +1024,33 @@ app = typer.Typer()
 
 @app.command()
 def run(
-    strategy: str = typer.Option("sma", help="Strategy name"),
-    symbol: str = typer.Option(..., help="US stock ticker"),
+    symbols: str = typer.Option(..., help="Comma-separated US stock tickers"),
+    strategy: str = typer.Option("equal-weight", help="Strategy name"),
     start: str = typer.Option(None, help="Start date YYYY-MM-DD"),
     end: str = typer.Option(None, help="End date YYYY-MM-DD"),
-    fast: int = typer.Option(20, help="SMA fast period"),
-    slow: int = typer.Option(50, help="SMA slow period"),
     commission: float = typer.Option(0.001, help="Per-share commission"),
     slippage_k: float = typer.Option(0.5, help="Slippage multiplier"),
     ruin_threshold: float = typer.Option(0.01, help="Max ruin probability"),
     drawdown_level: float = typer.Option(0.50, help="Drawdown threshold"),
     json: bool = typer.Option(False, "--json", help="Output JSON"),
 ) -> None:
-    """Run SMA backtest on historical data with Kelly analysis."""
-    # 1. Build config
-    # 2. Fetch prices via data.fetch_prices()
-    # 3. Create strategy via strategy.get_strategy()
-    # 4. Run backtest via engine.run_backtest()
-    # 5. Compute metrics via metrics.compute_metrics()
-    # 6. Compute Kelly via kelly.compute_kelly()
-    # 7. Format and print report via report.format_backtest_report()
+    """Run multi-asset backtest on historical data with Kelly analysis."""
+    # 1. Parse symbols: symbols.split(",") → list[str]
+    # 2. Build config
+    # 3. Fetch prices via data.fetch_prices(symbol_list, ...)
+    # 4. Create strategy via strategy.get_strategy()
+    # 5. Run backtest via engine.run_backtest()
+    # 6. Compute metrics via metrics.compute_metrics()
+    # 7. Compute Kelly via kelly.compute_kelly()
+    # 8. Format and print report via report.format_backtest_report()
 
 
 @app.command()
 def simulate(
-    strategy: str = typer.Option("sma"),
-    symbol: str = typer.Option(...),
+    symbols: str = typer.Option(..., help="Comma-separated US stock tickers"),
+    strategy: str = typer.Option("equal-weight"),
     start: str = typer.Option(None),
     end: str = typer.Option(None),
-    fast: int = typer.Option(20),
-    slow: int = typer.Option(50),
     paths: int = typer.Option(200, help="Number of Monte Carlo paths"),
     seed: int = typer.Option(42, help="Random seed"),
     commission: float = typer.Option(0.001),
@@ -907,38 +1067,54 @@ def verify(
     seed: int = typer.Option(42, help="Seed for stochastic tests"),
     json: bool = typer.Option(False, "--json"),
 ) -> None:
-    """Run known-answer tests to verify engine correctness."""
+    """
+    Run known-answer tests to verify engine correctness.
+
+    The seed parameter affects only stochastic tests (AC-6, AC-7).
+    Deterministic tests (AC-1, AC-1b, AC-2, AC-3, AC-4, AC-5) ignore the seed.
+    """
 ```
 
 ---
 
 ## 4. Data Contracts
 
-### 4.1 DataFrame Schema
+### 4.1 DataFrame Schema (per symbol)
 
 | Column | dtype | Constraint | Source |
 |--------|-------|-----------|--------|
-| `date` | DatetimeIndex | sorted ascending, no duplicates | yfinance |
+| `date` | DatetimeIndex | sorted ascending, no duplicates, aligned across symbols | yfinance |
 | `open` | float64 | > 0 | yfinance (adjusted via auto_adjust=True) |
 | `high` | float64 | >= open, >= close | yfinance (adjusted via auto_adjust=True) |
 | `low` | float64 | <= open, <= close | yfinance (adjusted via auto_adjust=True) |
 | `close` | float64 | > 0, no NaN | yfinance (adjusted via auto_adjust=True) |
 | `volume` | float64 | >= 0 | yfinance |
 
-**Note**: With `auto_adjust=True`, all OHLC columns are split- and dividend-adjusted. There is no separate 'Adj Close' column. MVP uses only the `close` column for signal generation and return computation. Open/High/Low are passed through for completeness but not used by the SMA strategy.
+**Note**: With `auto_adjust=True`, all OHLC columns are split- and dividend-adjusted. There is no separate 'Adj Close' column. MVP uses only the `close` column for return computation. Open/High/Low are passed through for completeness but not used by EqualWeight/AlwaysLong strategies. Each symbol has its own DataFrame; all are reindexed to the same `aligned_dates` (inner join).
 
 ### 4.2 Immutability Contract
 
-- `PriceData.df` is passed to strategies as `.copy()` — strategies cannot mutate engine data
+- `PriceData.prices` dict values are passed to strategies as `.copy()` — strategies cannot mutate engine data
 - All `@dataclass(frozen=True)` types are immutable after construction
 - `BacktestConfig` and `SimulationConfig` are frozen — no mid-run parameter changes
 
 ### 4.3 Return Convention
 
-- **Log-returns** throughout: `r_t = ln(P_t / P_{t-1})`
+Two return types are used for mathematically distinct purposes:
+
+- **Simple returns** for cross-sectional (multi-asset) aggregation:
+  `R_t = P_t/P_{t-1} - 1`. Portfolio return: `R_p,t = sum_i(w_i * R_{t,i})`.
+  Weighted sum of simple returns IS the portfolio simple return (exact).
+- **Log-returns** for time-series operations:
+  `r_t = ln(P_t / P_{t-1}) = ln(1 + R_t)`. Equity curve: `exp(cumsum(r_t))`.
+  Additive over time, so cumulative sum gives total log-return.
+- **Conversion** in engine pipeline (Step 5): `r_p,t = ln(1 + R_p,t)`.
+  This bridges cross-sectional aggregation (simple) to time-series compounding (log).
 - **Daily scale** for internal computation
 - **Annualized** for reporting: `* 252` for mean, `* sqrt(252)` for std
 - **Net returns** for Kelly estimation (post slippage and commission)
+- **Sharpe/Sortino** use arithmetic mean and std of daily log net returns.
+  This is the standard convention for daily-rebalanced portfolios.
 
 ---
 
@@ -949,13 +1125,13 @@ def verify(
 ```python
 def test_ac1_correct_returns():
     """
-    Construct: 11-day price series starting at 100, rising 1%/day
-        prices = [100, 101, 102.01, ..., 110.462...]
+    Construct: single symbol, 11-day price series starting at 100, rising 1%/day
+        prices = {"TEST": DataFrame with close=[100, 101, 102.01, ..., 110.462...]}
 
-    Strategy: AlwaysLongStrategy — returns weight=1.0 for all bars
+    Strategy: AlwaysLongStrategy — returns weight={TEST: 1.0} for all bars
         (no warmup, NaN only for first bar from shift)
 
-    Config: slippage_k=0, commission=0
+    Config: slippage_k=0, commission=0, symbols=["TEST"]
 
     Assert:
         total_return = equity_curve[-1] / equity_curve[warmup_end_idx] - 1
@@ -963,8 +1139,49 @@ def test_ac1_correct_returns():
 
     Note: 11 prices → 10 daily returns → 10 days of trading.
     AlwaysLongStrategy has warmup_bars=0. After shift(1), bar 0's
-    position is NaN (treated as 0), so first executed position is bar 1.
+    weight is NaN (treated as 0), so first executed position is bar 1.
     Equity curve starts at bar 1 (warmup_end_idx=1).
+
+    Single-symbol degenerate case validates basic engine correctness
+    before multi-asset complexity.
+    """
+```
+
+### AC-1b: Multi-symbol portfolio return aggregation
+
+```python
+def test_ac1b_multi_symbol_portfolio_return():
+    """
+    Construct: 2 symbols ("A", "B"), 3-day price series
+        A: close = [100, 105, 110]   → simple returns: [NaN, +5%, +4.76%]
+        B: close = [100,  95, 100]   → simple returns: [NaN, -5%, +5.26%]
+
+    Strategy: EqualWeightStrategy → weights = {A: 0.5, B: 0.5} for all bars
+
+    Config: slippage_k=0, commission=0
+
+    Expected portfolio simple returns (after shift(1)):
+        Bar 0: NaN (shift)
+        Bar 1: 0.5*(+0.05) + 0.5*(-0.05) = 0.0
+        Bar 2: 0.5*(+0.0476...) + 0.5*(+0.0526...) = +0.0501...
+
+    Expected portfolio log-returns:
+        Bar 1: ln(1 + 0.0)     = 0.0
+        Bar 2: ln(1 + 0.0501)  = 0.04889...
+
+    Expected equity curve (from bar 1):
+        exp(0.0) = 1.0
+        exp(0.0 + 0.04889) = 1.0501...
+
+    Assert:
+        abs(equity_curve[-1] - 1.0501...) < 1e-6
+
+    Why this test matters:
+        If the engine incorrectly aggregates LOG-returns instead of
+        simple returns, Bar 1 would give:
+            0.5*ln(1.05) + 0.5*ln(0.95) = 0.5*(0.04879) + 0.5*(-0.05129) = -0.00125
+        This is WRONG (negative when true portfolio return is zero).
+        The error comes from Jensen's inequality and compounds over time.
     """
 ```
 
@@ -973,10 +1190,10 @@ def test_ac1_correct_returns():
 ```python
 def test_ac2_look_ahead_prevention():
     """
-    Construct: random price series with known up/down days (seeded)
+    Construct: single symbol, random price series with known up/down days (seeded)
 
-    Strategy: PerfectForesightStrategy
-        - Knows future returns (implemented as: returns[t] > 0 → w=1, else w=0)
+    Strategy: PerfectForesightStrategy (single-symbol)
+        - Knows future returns (implemented as: returns[t] > 0 → w={sym: 1.0}, else w={sym: 0.0})
         - This is the RAW signal — engine applies shift(1)
 
     Assert:
@@ -1086,21 +1303,40 @@ def test_ac6_gbm_moments():
     """
 ```
 
-### AC-7: Known-answer verification (zero-edge)
+### AC-7: Known-answer verification (zero-edge, multi-symbol)
 
 ```python
 def test_ac7_zero_edge():
     """
-    Config: mu=0, sigma=0.20/yr, n_paths=200, n_days=252, seed=42
+    Config: 4 symbols, each with mu=0, sigma=0.20/yr,
+            n_paths=200, n_days=252, seed=42,
+            slippage_k=0, commission_per_share=0
 
-    Run SMA strategy on each generated path.
-    For each path, compute annualized Sharpe from the path's daily net returns.
+    Run EqualWeight strategy on 4-symbol zero-edge GBM paths.
+    Zero costs used so that only the return aggregation is tested
+    (costs would create a negative bias obscuring the zero-edge test).
+
+    For each path set, compute annualized Sharpe from the portfolio's
+    daily net returns (= gross returns since costs are zero).
     Compute mean_sharpe = mean of all path-level Sharpes.
     Compute SE_sharpe = std(path_sharpes) / sqrt(n_paths).
 
-    Expected: mean_sharpe ≈ 0 (no edge → no risk-adjusted return)
+    Expected: mean_sharpe ≈ 0 (no edge → no risk-adjusted return,
+              even with diversification across 4 zero-edge symbols)
 
     Assert: abs(mean_sharpe) < 2 * SE_sharpe
+
+    Note: This test validates that the multi-asset engine does not
+    create phantom returns from portfolio construction. With equal-weight
+    across 4 independent zero-edge assets, portfolio vol decreases by
+    ~sqrt(4)=2x but expected return remains zero, so Sharpe ≈ 0.
+
+    Note: Independent GBM per symbol means no cross-asset correlation.
+    For zero-edge assets, this is acceptable — correlation affects
+    portfolio variance but not expected return. However, ruin rate
+    comparisons (empirical vs theoretical) may differ because the
+    theoretical formula assumes a single-asset return stream, while
+    the empirical rate comes from a diversified portfolio.
 
     Determinism: fixed seed=42.
     """
@@ -1130,12 +1366,12 @@ def test_ac7_zero_edge():
 
 | Requirement | Target | Verification Method |
 |-------------|--------|-------------------|
-| Historical backtest (1 stock, 5yr) | < 2 seconds | `time` in test, assert < 2.0 |
-| Monte Carlo (200 paths, 5yr) | < 1 minute | `time` in test, assert < 60.0 |
+| Historical backtest (4 stocks, 5yr) | < 5 seconds | `time` in test, assert < 5.0 |
+| Monte Carlo (200 paths, 4 stocks, 5yr) | < 2 minutes | `time` in test, assert < 120.0 |
 | Memory usage | < 500 MB | Monitor via `tracemalloc` in test |
 | All verification tests | < 30 seconds | `time` in test suite |
 
-**Performance strategy**: Vectorize with numpy/pandas. The Monte Carlo loop should vectorize across days within a path. Across paths, a simple Python loop is acceptable for N=200 — vectorizing across paths (3D array) is an optimization if needed.
+**Performance strategy**: Vectorize with numpy/pandas. Per-symbol operations (returns, trailing vol) vectorize naturally. Portfolio return is a dot product of weight and return vectors per bar. The Monte Carlo loop should vectorize across days within a path. Across paths, a simple Python loop is acceptable for N=200 — vectorizing across paths is an optimization if needed.
 
 ---
 
@@ -1143,12 +1379,14 @@ def test_ac7_zero_edge():
 
 ### In Scope (MVP)
 
-- Single symbol, single strategy (SMA), single data source (yfinance)
-- Vectorized engine with shift(1) enforcement
-- Slippage = k * trailing vol, flat commission
-- Kelly f*, half-Kelly, critical Kelly (closed-form), capital efficiency frontier
-- GBM simulation with method-of-moments calibration
-- 7 acceptance criteria as verification tests
+- Multi-symbol portfolio engine with `{symbol: weight}` interface
+- Two built-in strategies (EqualWeight, AlwaysLong), single data source (yfinance)
+- Multi-symbol data fetch with date alignment (inner join)
+- Vectorized engine with shift(1) enforcement and portfolio return computation
+- Per-symbol slippage = k * trailing vol, per-symbol flat commission
+- Kelly f*, half-Kelly, critical Kelly (closed-form), capital efficiency frontier on portfolio returns
+- Multi-symbol GBM simulation (independent per symbol) with method-of-moments calibration
+- 8 acceptance criteria as verification tests (AC-1 through AC-7, plus AC-1b for multi-symbol aggregation)
 - CLI with `run`, `simulate`, `verify` subcommands
 - CLI table + JSON output
 - Survivorship warning (non-suppressible)
@@ -1157,11 +1395,13 @@ def test_ac7_zero_edge():
 ### Deferred to North Star (not L1-L14)
 
 - **Reproducibility metadata** (git hash, dependency versions, CLI invocation): PRD lists this in North Star Output & Reporting. MVP includes seed for simulation but not full reproducibility envelope. This is a polish item, not a correctness item.
+- **Correlated simulation**: MVP simulates symbols independently. North Star adds factor model / copula correlation structure.
 
 ### Out of Scope (see PRD Acknowledged Limitations L1-L14)
 
 - Multiple data sources, caching, PIT data
-- Pairs trading, multi-asset, portfolio optimization
+- Signal-driven strategies (SMA, momentum, pairs trading, cointegration)
+- Portfolio optimization (mean-variance, risk parity, Black-Litterman)
 - Bootstrap CI on Kelly, walk-forward, DSR/trial registry
 - Regime-switching, GARCH, Heston, Merton models
 - Signal half-life, factor attribution, turnover reporting
@@ -1179,29 +1419,35 @@ Each module has its own test file:
 
 | Test File | Tests |
 |-----------|-------|
-| `test_data.py` | Fetch + validation, error cases |
-| `test_strategy.py` | SMA weights, warmup, edge cases |
-| `test_engine.py` | Shift(1) correctness, warmup handling |
-| `test_execution.py` | Slippage calculation, commission, edge cases |
+| `test_data.py` | Multi-symbol fetch, validation, date alignment, error cases |
+| `test_strategy.py` | EqualWeight/AlwaysLong weights, multi-symbol, edge cases |
+| `test_engine.py` | Shift(1) correctness, multi-symbol portfolio returns, warmup |
+| `test_execution.py` | Per-symbol slippage, commission, multi-symbol aggregation |
 | `test_metrics.py` | Sharpe, Sortino, drawdown formulas |
 | `test_kelly.py` | f*, ruin probability, frontier, critical solver |
 | `test_simulation.py` | GBM generation, moment matching |
 | `test_report.py` | Output formatting, JSON schema |
-| `test_nfr.py` | Performance: backtest < 2s, simulation < 60s, memory < 500MB, verification < 30s |
+| `test_nfr.py` | Performance: backtest < 5s, simulation < 120s, memory < 500MB, verification < 30s |
 
 ### Integration Tests
 
 | Test | Description |
 |------|------------|
-| `test_ac1` through `test_ac7` | Acceptance criteria (see Section 5) |
-| `test_cli_run` | End-to-end `backtest run` produces valid output |
-| `test_cli_simulate` | End-to-end `backtest simulate` completes |
+| `test_ac1` through `test_ac7` + `test_ac1b` | Acceptance criteria (see Section 5) |
+| `test_cli_run` | End-to-end `backtest run` produces valid output for multi-symbol portfolio |
+| `test_cli_simulate` | End-to-end `backtest simulate` completes for multi-symbol |
 | `test_cli_verify` | All verification tests pass |
 | `test_cli_json` | `--json` flag produces valid JSON |
 
 ### Test Fixtures
 
-- `AlwaysLongStrategy`: weight=1.0 for all bars (for AC-1)
-- `PerfectForesightStrategy`: uses future returns as signal (for AC-2)
+- `AlwaysLongStrategy`: weight={sym: 1/N} for all bars (for AC-1, single-symbol degenerates to 1.0)
+- `PerfectForesightStrategy`: test-only Strategy subclass (not in production module).
+  Receives full price history including future dates. For each bar t, peeks at
+  next-day simple return: if R_{t+1} > 0 → weight={sym: 1.0}, else weight={sym: 0.0}.
+  Single-symbol only (symbols list must contain exactly 1). warmup_bars=0.
+  The engine's shift(1) delays this signal, so it is NOT actually profitable (for AC-2)
 - `make_deterministic_returns(mu, sigma, n)`: generates alternating series with exact moments (for AC-4)
 - `make_constant_price_series(price, n)`: constant price (edge case testing)
+- `make_synthetic_price_data(symbols, n_days, seed)`: generates multi-symbol PriceData with independent random walks (for multi-symbol engine tests)
+- `make_multi_symbol_zero_edge(n_symbols, n_days, sigma, seed)`: generates PriceData for n symbols with mu=0 each (for AC-7)
