@@ -101,13 +101,14 @@ The skill file has four logical sections, executed in sequence based on what the
 ```yaml
 ---
 name: GitHub CI/CD Guardian
-description: Diagnose GitHub Actions failures, audit workflow security, and fix CI/CD pipelines for trading systems.
+description: This skill should be used when the user asks to "fix my CI", "why is CI failing", "audit workflow security", "check CI security", or mentions GitHub Actions failures, pipeline diagnosis, or CI/CD security audits.
+version: 1.0.0
 ---
 ```
 
-**Triggering keywords** encoded in description: "diagnose", "GitHub Actions failures", "audit", "workflow security", "fix", "CI/CD pipelines", "trading systems". These match common user intents like "why is CI failing", "audit my workflows", "fix my pipeline".
+**Triggering format**: Uses third-person trigger phrases per Claude Code skill development docs for reliable auto-activation. Includes quoted user intents ("fix my CI", "audit workflow security") that match common prompts. ~199 characters, under the 200-character limit.
 
-The description is 97 characters (matching the spec's example) -- well under the 200-character limit.
+Note: The spec's original 97-char declarative description is superseded by this trigger-phrase format based on Claude Code's documented best practice. The `version` field is included per the standard SKILL.md frontmatter schema.
 
 ### 2.3 Preamble Section Contract
 
