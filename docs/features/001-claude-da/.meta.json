@@ -1,0 +1,28 @@
+{
+  "id": "001",
+  "slug": "claude-da",
+  "title": "Claude-DA: Natural Language Data Analysis API",
+  "status": "active",
+  "branch": "feature/claude-litellm",
+  "createdAt": "2026-02-07T09:58:47Z",
+  "currentPhase": "specify",
+  "phases": {
+    "brainstorm": {
+      "started": "2026-02-07T09:58:47Z",
+      "completed": "2026-02-07T11:30:00Z",
+      "iterations": 5
+    },
+    "specify": {
+      "started": "2026-02-07T12:00:00Z",
+      "completed": "2026-02-07T13:15:00Z",
+      "iterations": 1,
+      "reviewerNotes": [
+        "30s query timeout mechanism unspecified (design should clarify MCP server native behavior)",
+        "disallowed_tools list narrower than PRD (allowed_tools wildcard handles this implicitly)",
+        "Audit log timing for streaming requests needs clarification at design time",
+        "Exact PyPI package name for Agent SDK should be verified at design time",
+        "Python minimum version and sample LiteLLM proxy config to be determined at design time"
+      ]
+    }
+  }
+}
