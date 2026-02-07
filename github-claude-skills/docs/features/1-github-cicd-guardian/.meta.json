@@ -5,7 +5,7 @@
   "status": "active",
   "created": "2026-02-07T00:00:00.000Z",
   "branch": "feature/github-claude-skills",
-  "brainstorm_source": "docs/brainstorms/20260207-github-cicd-skill.prd.md",
+  "brainstorm_source": "github-claude-skills/docs/brainstorms/20260207-github-cicd-skill.prd.md",
   "currentPhase": "implement",
   "phases": {
     "specify": {
