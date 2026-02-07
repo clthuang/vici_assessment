@@ -50,9 +50,10 @@ uv run subterminator cancel --service netflix --dry-run
 
 ## Task 1: US Stock Backtesting System
 
-Statistical arbitrage backtesting system with Kelly criterion sizing and Monte Carlo simulation. Runs vectorized backtests over historical price data, computes risk-adjusted metrics, and estimates ruin probability.
+Statistical arbitrage backtesting system with Kelly criterion sizing and Monte Carlo simulation. Runs vectorized backtests over historical price data, computes risk-adjusted metrics (Sharpe, Sortino, drawdown), estimates optimal position sizing via the Kelly criterion, and evaluates ruin probability through Monte Carlo simulation. 88 tests, 93% coverage, 8 acceptance criteria verified.
 
 - **Product docs:** [stock-backtester/README.md](stock-backtester/README.md)
+- **Developer guide:** [stock-backtester/docs/TECHNICAL_GUIDE.md](stock-backtester/docs/TECHNICAL_GUIDE.md)
 
 ---
 
@@ -85,6 +86,7 @@ subterminator/           # Task 4: Browser automation tool
 stock-backtester/        # Task 1: Statistical arbitrage backtester
   src/stock_backtester/  #   Source code (10 modules)
   tests/                 #   Test suite (88 tests, 93% coverage)
+  docs/                  #   Technical guide, feature specs
   pyproject.toml         #   Project config
 github-claude-skills/    # Task 3: Claude Code skill plugin
   .claude-plugin/        #   Plugin manifest
