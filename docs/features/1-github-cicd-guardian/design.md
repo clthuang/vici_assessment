@@ -4,7 +4,7 @@
 
 ### Codebase Patterns
 - **No existing skills or plugin structure** in this codebase -- this is the first skill file
-- **Existing CI workflow** (`.github/workflows/ci.yml`) uses unpinned action tags (`@v4`, `@v5`, `@v3`), no explicit top-level `permissions:` block on most jobs, and `${{ github.ref_name }}` in `run:` blocks -- the skill's own repo would flag several P1 findings
+- **This development repo's CI workflow** (`.github/workflows/ci.yml`) uses unpinned action tags (`@v4`, `@v5`, `@v3`) and no explicit top-level `permissions:` block on most jobs -- useful as a realistic test target since it exhibits P1-1 (unpinned actions) and P1-2 (overly broad permissions) anti-patterns. Note: `${{ github.ref_name }}` is used in a `run:` block but is a push-event context value, not a PR-attacker-controlled input like `github.event.pull_request.title` (P1-4). The skill operates on the **end user's** repo, not this development repo
 - **Empty scaffold** at `github-claude-skills/` with only a README
 
 ### External Prior Art
@@ -20,20 +20,25 @@
 
 ### What We're Building
 
-A single `SKILL.md` file (~200-400 lines) inside a Claude Code plugin directory structure. The skill encodes two capabilities:
+A Claude Code plugin that end users install into **their own projects**. Once installed, Claude Code gains CI/CD expertise and operates on the user's repository -- reading their `.github/workflows/` files, fetching their pipeline logs via `gh` CLI, and auditing their workflow security.
 
-1. **P0: Pipeline Failure Diagnosis & Fix** -- a step-by-step workflow that Claude follows when users ask about CI failures
-2. **P1: Security Audit & Supply Chain Protection** -- a structured checklist and procedure for auditing workflow files
+**Important distinction**: This repository (`vici_assessment-github-claude-skills`) is the **development repository** that produces the plugin. The plugin's CI/CD features operate on whichever repository the end user has open in Claude Code, not on this development repository. All references to workflow files, `gh run list`, security audits, etc. refer to the **end user's project**.
+
+The plugin contains a single `SKILL.md` file (~200-400 lines) that encodes two capabilities:
+
+1. **P0: Pipeline Failure Diagnosis & Fix** -- a step-by-step workflow that Claude follows when users ask about CI failures in their project
+2. **P1: Security Audit & Supply Chain Protection** -- a structured checklist and procedure for auditing the user's workflow files
 
 The skill file IS the architecture. There are no runtime components, no APIs, no state. It's a markdown document that shapes Claude's behavior through structured instructions.
 
 ### Plugin Directory Structure
 
-Claude Code requires `plugin.json` at the plugin root (the directory containing `skills/`). The plugin root is registered via `.claude/plugins.json` or Claude Code's plugin discovery.
+Claude Code requires `plugin.json` inside a `.claude-plugin/` directory at the plugin root. The plugin root is registered via `.claude/plugins.json` or Claude Code's plugin discovery.
 
 ```
 github-claude-skills/
-├── plugin.json                          # Plugin manifest (at plugin root, per Claude Code spec)
+├── .claude-plugin/
+│   └── plugin.json                      # Plugin manifest (required location per Claude Code spec)
 └── skills/
     └── github-cicd-guardian/
         ├── SKILL.md                     # The skill file (primary deliverable)
@@ -42,7 +47,7 @@ github-claude-skills/
             └── failure-categories.md    # P0-3 failure categorization reference
 ```
 
-**Plugin registration**: The user adds this plugin to their Claude Code environment by adding the `github-claude-skills/` directory path to their plugins configuration. Claude Code discovers `plugin.json` at the plugin root and loads skills from `skills/` subdirectories.
+**Plugin registration**: An end user installs this plugin into their own project by adding the `github-claude-skills/` directory path to their Claude Code plugins configuration. Once registered, Claude Code discovers `.claude-plugin/plugin.json` at the plugin root and loads skills from `skills/` subdirectories. The skill then operates on the user's repository -- scanning their `.github/workflows/`, fetching their pipeline logs, and auditing their workflow security.
 
 ### Key Architectural Decisions
 
@@ -50,7 +55,7 @@ github-claude-skills/
 |---|----------|-----------|----------------------|
 | D1 | **Single SKILL.md + references/ for detail** | SKILL.md stays under 500 lines (token budget). Detailed checklists and categorization tables go in `references/` loaded as-needed by Claude via Read tool | Everything in one file (exceeds token budget); scripts/ for logic (unnecessary -- all operations are `gh` CLI via Bash) |
 | D2 | **No scripts/ directory** | All operations use Claude Code's existing Bash tool to run `gh` CLI commands. There's no deterministic logic that benefits from being in a script vs. inline in the skill | Shell scripts for `gh` CLI wrappers (adds indirection without benefit; Claude can run `gh` directly) |
-| D3 | **Plugin structure, not standalone file** | `plugin.json` enables proper plugin discovery and future extensibility (V2 commands, agents). A standalone `SKILL.md` would work but limits growth | Standalone SKILL.md (works for MVP but precludes V2 slash commands or hooks without restructuring) |
+| D3 | **Plugin structure, not standalone file** | `.claude-plugin/plugin.json` enables proper plugin discovery and future extensibility (V2 commands, agents). A standalone `SKILL.md` would work but limits growth | Standalone SKILL.md (works for MVP but precludes V2 slash commands or hooks without restructuring) |
 | D4 | **Triaging encoded as behavioral rules, not conditional logic** | Claude interprets behavioral instructions ("always ask before writing") more reliably than decision trees with multiple branches. Three simple rules > complex flowchart | Formal decision tree in SKILL.md (brittle -- Claude may not follow multi-branch logic consistently) |
 | D5 | **Prerequisites checked inline, not as a pre-hook** | Check `gh` availability at the start of each workflow within SKILL.md rather than a plugin hook. Simpler, fewer moving parts | PreToolUse hook that validates `gh` before any Bash call (over-engineered -- most Bash calls aren't `gh`) |
 | D6 | **Structured output formats specified in SKILL.md** | Prescribe exact output format (headers, code blocks, severity labels) in the skill instructions so Claude produces consistent, parseable output | Freeform output (inconsistent formatting across invocations) |
@@ -58,45 +63,11 @@ github-claude-skills/
 
 ### Component Model
 
-The skill file has four logical sections, executed in sequence based on what the user asks:
+The skill file has four logical sections, executed in sequence based on what the user asks. The diagram below is a simplified overview -- for authoritative step numbering (including the 2/3a/3b split in P1), see the interface tables in Section 2.4 and 2.5 and the detailed flow diagrams in Section 3.
 
-```
-┌─────────────────────────────────────────────┐
-│                 SKILL.md                     │
-│                                              │
-│  ┌─────────────────────────────────────┐    │
-│  │ § Preamble                           │    │
-│  │  - Frontmatter (name, description)   │    │
-│  │  - Context (trading firm, why this)  │    │
-│  │  - Triaging Rules (3 rules)          │    │
-│  │  - Prerequisites check               │    │
-│  └──────────────┬──────────────────────┘    │
-│                  │                            │
-│         (user intent determines path)        │
-│                  │                            │
-│  ┌──────────────┴──────────────────────┐    │
-│  │ § P0: Pipeline Failure Diagnosis     │    │
-│  │  Step 1: Fetch status (gh run list)  │    │
-│  │  Step 2: Identify failure run        │    │
-│  │  Step 3: Fetch logs (gh run view)    │    │
-│  │  Step 4: Categorize failure          │    │
-│  │  Step 5: Propose fix (show diff)     │    │
-│  │  Step 6: Apply with confirmation     │    │
-│  │  → reads references/failure-cats.md  │    │
-│  └──────────────────────────────────────┘    │
-│                                              │
-│  ┌──────────────────────────────────────┐    │
-│  │ § P1: Security Audit                  │    │
-│  │  Step 1: Discover workflow files      │    │
-│  │  Step 2: Run zizmor (if available)    │    │
-│  │  Step 3: Pattern-based checks         │    │
-│  │  Step 4: Vulnerability check          │    │
-│  │  Step 5: Generate report              │    │
-│  │  → reads references/security-check.md │    │
-│  └──────────────────────────────────────┘    │
-│                                              │
-└─────────────────────────────────────────────┘
-```
+![Component Model](diagram-component-model.png)
+
+**Color legend**: Blue (#4A90D9) = SKILL.md sections, Orange (#E8943A) = decision points, Teal (#5BB5A2) = reference files loaded on-demand.
 
 ### Token Budget
 
@@ -142,7 +113,7 @@ The description is 97 characters (matching the spec's example) -- well under the
 
 The preamble runs unconditionally when the skill is invoked. It:
 
-1. **Sets context**: "You are operating as a CI/CD specialist for a trading firm's GitHub Actions pipelines."
+1. **Sets context**: "You are operating as a CI/CD specialist for the user's GitHub Actions pipelines in this repository." (The trading firm context is encoded as domain expertise. While the skill is branded and optimized for trading firms per the spec, the CI/CD procedures themselves are functionally generic to GitHub Actions.)
 2. **Checks prerequisites**: Instructs Claude to verify `gh` CLI before proceeding:
    - Run `gh auth status` (covers both installation and auth in one check)
    - If it fails, show the appropriate error from the error table and stop
@@ -189,6 +160,8 @@ The preamble runs unconditionally when the skill is invoked. It:
 2. **Re-run** the failed jobs (`gh run rerun {id} --failed`)
 3. **Skip** -- you'll handle it manually
 ```
+
+Note: Always present all three options as shown above; do not reduce to a simple yes/no. This gives the user explicit control over which action to take.
 
 ### 2.5 P1 Interface: Security Audit
 
@@ -251,6 +224,12 @@ Example entries:
 **Example bad**: `uses: actions/checkout@v4`
 **Example good**: `uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11`
 **Remediation**: Pin to the full commit SHA of the current release tag
+
+### 2. Overly Broad Permissions (P1-2) [Critical]
+**Look for**: `permissions: write-all` or missing `permissions:` block at workflow or job level
+**Example bad**: `permissions: write-all` or no `permissions:` key at all
+**Example good**: `permissions: { contents: read, pull-requests: write }`
+**Remediation**: Add explicit least-privilege `permissions:` block scoped to what the workflow actually needs
 
 ### 3. Hardcoded Secrets (P1-3) [Critical]
 **Look for**: Known credential patterns in workflow YAML values
@@ -318,59 +297,15 @@ For `gh` API errors during operation:
 
 ### P0: Diagnosis Flow
 
-```
-User: "fix my CI" or "why is CI failing?" or "why did run 12345 fail?"
-  │
-  ├─ [1] If user specified run ID → skip to [2] with that ID
-  │      Otherwise: gh run list --limit 10 → run status summary
-  │      (read: no confirmation)
-  │
-  ├─ [2] gh run view {id} --log-failed   → failure logs
-  │      if empty: gh run view {id} --log  → full logs (truncate)
-  │      (read: no confirmation)
-  │
-  ├─ [3] Read references/failure-categories.md
-  │      + Match log patterns             → failure category
-  │      (analyze: no confirmation)
-  │
-  ├─ [4] Read relevant source files
-  │      + Generate fix proposal           → diff + explanation
-  │      (propose: no confirmation)
-  │
-  └─ [5] User confirms
-         ├─ Apply: Write/Edit files        → changes applied
-         ├─ Rerun: gh run rerun {id}       → workflow triggered
-         └─ Skip: done
-```
+![P0 Diagnosis Flow](diagram-p0-diagnosis-flow-v2.png)
+
+**Color legend**: Blue (#4A90D9) = read/analyze steps (no confirmation), Orange (#E8943A) = write/execute steps (confirmation required), Teal (#5BB5A2) = reference file reads, Gray (#F5F5F5) = skip/fallback paths.
 
 ### P1: Security Audit Flow
 
-```
-User: "audit my workflows" or "check CI security"
-  │
-  ├─ [1] Glob .github/workflows/*.{yml,yaml}  → file list
-  │
-  ├─ [2] which zizmor
-  │      ├─ found: zizmor --format json ...    → JSON findings
-  │      └─ not found: skip
-  │
-  ├─ [3] Read each workflow file
-  │      + Read references/security-checklist.md
-  │      + Pattern matching against 8 anti-patterns
-  │      → findings list
-  │
-  ├─ [4] Vulnerability check (layered):
-  │      a. Use zizmor findings from [3a] if available (primary source)
-  │      b. gh api /repos/{owner}/{repo}/security-advisories
-  │         (self-reported only -- usually returns empty; best-effort)
-  │      c. Claude's training knowledge + explicit caveat
-  │      NOTE: Most vulnerability data comes from zizmor or Claude,
-  │      not from gh api. The API check is supplementary.
-  │
-  └─ [5] Compile report
-         → Critical / Warning / Informational + Limitations
-         (entire flow is read-only: no confirmation needed)
-```
+![P1 Security Audit Flow](diagram-p1-security-audit-flow-v2.png)
+
+**Color legend**: Blue (#4A90D9) = read/discover steps, Orange (#E8943A) = decision points, Teal (#5BB5A2) = reference file reads. Entire flow is read-only -- no confirmation needed at any step.
 
 ---
 
@@ -409,6 +344,8 @@ Each test is a user prompt + expected behavior pair:
 | T8 | Audit on repo with secrets | Secret names shown, values never displayed | SM-8 (secret protection) |
 | T9 | Full security audit | Report includes limitations disclaimer | SM-9 (coverage disclaimer) |
 
+**Priority order**: T5 (prerequisite failure) and T7 (log injection resistance) guard security invariants and should be validated first. T6 (all 8 anti-patterns) validates core audit coverage. Remaining tests validate behavioral correctness.
+
 ### How to Execute Tests
 
 1. **Manual scenario testing**: Run each prompt in Claude Code with the skill installed
@@ -424,7 +361,7 @@ Files to create during implementation:
 
 | File | Purpose | Est. Lines |
 |------|---------|-----------|
-| `github-claude-skills/plugin.json` | Plugin manifest (at plugin root) | ~5 |
+| `github-claude-skills/.claude-plugin/plugin.json` | Plugin manifest (required location) | ~5 |
 | `github-claude-skills/skills/github-cicd-guardian/SKILL.md` | Primary skill file | ~220 |
 | `github-claude-skills/skills/github-cicd-guardian/references/security-checklist.md` | 8 anti-patterns + P1-3 regex patterns | ~80 |
 | `github-claude-skills/skills/github-cicd-guardian/references/failure-categories.md` | 6 failure categories with log signatures | ~40 |
@@ -453,7 +390,7 @@ Shows the plugin structure, preamble execution flow, and routing to P0/P1 based 
 
 Complete 6-step procedure with inputs, tools, outputs, and confirmation requirements at each step. Includes run-ID bypass path and `--log-failed` fallback.
 
-![P0 Diagnosis Flow](diagram-p0-diagnosis-flow.png)
+![P0 Diagnosis Flow](diagram-p0-diagnosis-flow-v2.png)
 
 **Step summary with I/O:**
 
@@ -470,7 +407,7 @@ Complete 6-step procedure with inputs, tools, outputs, and confirmation requirem
 
 Complete 5-step procedure with layered vulnerability checking. Entire flow is read-only -- no confirmation needed at any step.
 
-![P1 Security Audit Flow](diagram-p1-security-audit-flow.png)
+![P1 Security Audit Flow](diagram-p1-security-audit-flow-v2.png)
 
 **Step summary with I/O:**
 
