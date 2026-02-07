@@ -2,11 +2,12 @@
   "id": "1",
   "slug": "github-cicd-guardian",
   "mode": "standard",
-  "status": "active",
+  "status": "completed",
+  "completed": "2026-02-07T07:00:00.000Z",
   "created": "2026-02-07T00:00:00.000Z",
   "branch": "feature/github-claude-skills",
   "brainstorm_source": "github-claude-skills/docs/brainstorms/20260207-github-cicd-skill.prd.md",
-  "currentPhase": "implement",
+  "currentPhase": "finish",
   "phases": {
     "specify": {
       "started": "2026-02-07T00:10:00.000Z",
@@ -46,7 +47,8 @@
       ]
     },
     "finish": {
-      "started": "2026-02-07T06:00:00.000Z"
+      "started": "2026-02-07T06:00:00.000Z",
+      "completed": "2026-02-07T07:00:00.000Z"
     },
     "design": {
       "started": "2026-02-07T01:00:00.000Z",
