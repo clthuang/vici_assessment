@@ -28,8 +28,10 @@ Phase 5: Demo + Documentation
 **Goal**: Runnable project with config, exceptions, and audit — all unit-testable with zero external services.
 
 ### 1.1 Project scaffold
-- Create `claude-litellm/pyproject.toml` (Python >=3.11, dependencies: `litellm>=1.0,<2.0`, `claude-agent-sdk>=0.1.30,<0.2.0`)
-- Upper bounds prevent automatic breakage from API-unstable v0.1.x Agent SDK and major LiteLLM changes
+- Create `claude-litellm/pyproject.toml`:
+  - Runtime dependencies: `litellm>=1.0,<2.0`, `claude-agent-sdk>=0.1.30,<0.2.0`
+  - Dev dependencies: `pytest`, `pytest-asyncio`, `ruff`, `mypy` (matching subterminator's toolchain)
+  - Upper bounds prevent automatic breakage from API-unstable v0.1.x Agent SDK and major LiteLLM changes
 - Create `claude-litellm/src/claude_da/__init__.py` with `__version__`
 - Create `claude-litellm/tests/unit/` and `claude-litellm/tests/integration/` directories
 - Create `claude-litellm/tests/conftest.py` with pytest-asyncio config
@@ -75,7 +77,7 @@ Phase 5: Demo + Documentation
 - Implement `discover_schema(db_path)`: open read-only SQLite, query `sqlite_master` + `PRAGMA table_info` + `PRAGMA foreign_key_list`
 - Implement `verify_read_only(db_path)`: attempt write, confirm failure
 - Implement `DatabaseSchema.to_prompt_text()`: human-readable schema for LLM
-- **Test**: Discover schema from `demo.db`, verify 4 tables with correct columns/types/FKs, `to_prompt_text` output is readable and under 12K chars, `verify_read_only` passes on read-only file and raises on writable file
+- **Test**: Use a pytest fixture that creates a minimal test DB (4 tables, few rows) in a temp directory — does not depend on the seeder script for unit test isolation. Verify 4 tables with correct columns/types/FKs, `to_prompt_text` output is readable and under 12K chars, `verify_read_only` passes on read-only file and raises on writable file
 
 ### 2.3 prompt.py
 - Implement `build_system_prompt(schema)`: role + schema + rules + read-only instructions + non-data handling
@@ -111,7 +113,11 @@ Phase 5: Demo + Documentation
     - `disallowed_tools`: `["Bash", "Write", "Edit"]`
     - `permission_mode`: `"bypassPermissions"` — required for headless server operation. Without this, the SDK prompts for interactive approval on tool calls, which would hang in the LiteLLM proxy context. Security is enforced by the three-layer safety architecture (allowed_tools, disallowed_tools, filesystem permissions), not by interactive permission prompts.
   - Wrap `query()` in `asyncio.wait_for(timeout=240)`
-  - Iterate `AsyncIterator[Message]`: accumulate text from `AssistantMessage`, capture SQL from tool use blocks (match tool names `mcp__sqlite__read_query`, `mcp__sqlite__list_tables`, `mcp__sqlite__describe-table`; extract SQL from `input` dict), extract metadata from `ResultMessage`
+  - Iterate `AsyncIterator[Message]`:
+    - `AssistantMessage` with text → accumulate response text
+    - `AssistantMessage` with tool use → capture SQL from tool use blocks (match tool names `mcp__sqlite__read_query`, `mcp__sqlite__list_tables`, `mcp__sqlite__describe-table`; extract SQL from `input` dict)
+    - Tool result messages → capture query results (row data, column names) and store in `AgentResult.query_results` for verbose audit logging (AC-06.6)
+    - `ResultMessage` → extract `total_cost_usd`, `usage`, `duration_ms`, `num_turns` into `AgentResultMetadata`
   - Return `AgentResult`
 - Exception mapping: `asyncio.TimeoutError` → `AgentTimeoutError`, SDK errors → appropriate exceptions
 - **Test (unit)**: `_messages_to_prompt` conversion (single message, multi-turn, system message filtering). Agent construction with mock config.
@@ -210,13 +216,17 @@ Phase 5: Demo + Documentation
                                                  3.1 agent core ──► 3.2 agent streaming
                                                                            │
                                                                            ▼
-                                                  4.1 provider structure ──► 4.2 acompletion ──► 4.3 astreaming ──► 4.4 litellm config
-                                                                                                                           │
-                                                                                                                           ▼
-                                                                                                   5.1 README ──► 5.2 tests ──► 5.3 CI
+                                                  4.1 provider structure ──┬──► 4.2 acompletion ──┬──► 4.4 litellm config
+                                                                           │                       │
+                                                                           └──► 4.3 astreaming ───┘
+                                                                                                        │
+                                                                                                        ▼
+                                                                                    5.1 README ──► 5.2 tests ──► 5.3 CI
 ```
 
-Note: `schema.py` depends on `config.py` (for `db_path`) and `exceptions.py` (for `ConfigurationError`). `prompt.py` depends on `exceptions.py` (for `ConfigurationError` on size limit exceeded). These cross-edges are implicit in the phase ordering but noted here for completeness.
+Notes:
+- `schema.py` depends on `config.py` (for `db_path`) and `exceptions.py` (for `ConfigurationError`). `prompt.py` depends on `exceptions.py` (for `ConfigurationError` on size limit exceeded). These cross-edges are implicit in the phase ordering.
+- 4.2 (acompletion) and 4.3 (astreaming) are **independent** — both depend on 4.1 but not on each other. They can be implemented in parallel. 4.4 (litellm config) depends on both.
 
 ## Risk Mitigation Checkpoints
 
@@ -224,6 +234,6 @@ Note: `schema.py` depends on `config.py` (for `db_path`) and `exceptions.py` (fo
 |---|---|---|---|
 | Phase 1 gate | After 1.4 | Config, exceptions, audit all pass unit tests | Fix before proceeding |
 | Phase 2 gate | After 2.3 | Schema discovery + prompt from real demo.db | Fix before proceeding |
-| **Phase 3 gate (critical)** | After 3.1 | Agent SDK smoke test with live API | Fall back to CLI subprocess approach |
+| **Phase 3 gate (critical)** | After 3.2 | Agent SDK smoke test (core + streaming) with live API | Fall back to CLI subprocess approach (applies to both core and streaming paths) |
 | Phase 4 gate | After 4.4 | End-to-end via LiteLLM proxy | Debug provider wiring |
 | Phase 5 gate | After 5.3 | Reviewer can run 3 commands and query data | Fix README/setup |

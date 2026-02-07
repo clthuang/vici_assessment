@@ -441,19 +441,20 @@ class DataAnalystAgent:
         """
 
     async def run_streaming(
-        self, messages: list[dict]
-    ) -> tuple[AsyncIterator[GenericStreamingChunk], asyncio.Future[AgentResult]]:
+        self, messages: list[dict], result_holder: list[AgentResult | None]
+    ) -> AsyncIterator[GenericStreamingChunk]:
         """Execute a streaming analysis request.
 
-        Returns a tuple of (chunk_iterator, result_future).
-        - chunk_iterator yields GenericStreamingChunk for each text block.
-          Final chunk has is_finished=True, finish_reason="stop", and
-          includes usage data (prompt_tokens, completion_tokens, total_tokens).
-        - result_future resolves to AgentResult after iteration completes,
-          containing accumulated SQL queries and metadata for audit logging.
+        Returns an async generator yielding GenericStreamingChunk dicts.
+        - Intermediate chunks: text content, is_finished=False
+        - Final chunk: is_finished=True, finish_reason="stop", usage data
+        - After yielding the final chunk, stores the accumulated AgentResult
+          in result_holder[0] so the caller (astreaming) can access it
+          for audit logging.
 
-        This avoids mutable instance state (self.last_result) and is safe
-        for concurrent requests.
+        This uses a mutable container pattern instead of a Future return,
+        since astreaming() must return AsyncIterator (not a tuple).
+        Safe for concurrent requests — each call gets its own result_holder.
 
         Raises:
             Same as run().

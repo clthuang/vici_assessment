@@ -41,13 +41,13 @@
     },
     "create-plan": {
       "started": "2026-02-07T15:00:00Z",
-      "completed": "2026-02-07T15:35:00Z",
-      "iterations": 1,
+      "completed": "2026-02-07T15:50:00Z",
+      "iterations": 2,
       "reviewerNotes": [
-        "4.2/4.3 (acompletion/astreaming) are independent — could be parallelized during task creation",
-        "Phase 3 gate should encompass both 3.1 and 3.2 since streaming also needs live SDK",
-        "AgentResult.query_results capture from tool result messages should be explicit in task breakdown",
-        "Phase 2.2 tests should use pytest fixture with temp DB for unit test isolation"
+        "Design Section 2.6 streaming return type updated to match plan (container pattern)",
+        "ResultMessage.usage may be None — handle gracefully in streaming and audit",
+        "Schema text 12K limit is the full prompt limit — schema alone should be tighter",
+        "GenericStreamingChunk may need tool_use: None field for LiteLLM compatibility"
       ]
     }
   }
