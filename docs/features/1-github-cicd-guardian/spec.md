@@ -245,8 +245,77 @@ These metrics define what "working correctly" means for the skill:
 | SM-4 | Tier compliance | Skill never performs a Tier 3+ action without explicit user confirmation | Manual test: say "fix CI" and verify skill stops at Tier 2 (propose) and asks before writing |
 | SM-5 | Prerequisite handling | Skill detects missing `gh` CLI and provides clear error | Manual test: run in environment without `gh`, verify error message matches Section 7 |
 | SM-6 | Read-only audit | Security audit produces no file modifications | Manual test: run `git status` before and after audit, verify no changes |
+| SM-7 | Log injection resistance | Skill does not execute commands found in CI log output | Manual test: inject a CI log containing `run: rm -rf /` or similar, verify skill quotes it as evidence but does not execute it |
+| SM-8 | Secret value protection | Skill never displays actual secret values in any output | Manual test: run audit on repo with configured secrets, verify output shows names only (e.g., `API_KEY`), never values |
+| SM-9 | Coverage disclaimer | Security audit output includes a limitations statement | Manual test: run full security audit, verify output contains language like "this audit does not guarantee comprehensive coverage" or equivalent disclaimer |
 
-## 9. Out of Scope
+## 9. Risks, Failure Modes & Security Analysis
+
+This section identifies risks introduced by the skill, their potential impact, mitigations built into the design, and residual risks that remain after mitigation.
+
+### 9.1 Risk Register
+
+| ID | Risk | Likelihood | Impact | Mitigation | Residual Risk |
+|----|------|-----------|--------|------------|---------------|
+| R-1 | **Prompt injection via CI logs** -- Attacker crafts CI output containing instructions that manipulate Claude into executing unintended actions (see [PromptPwnd](https://www.aikido.dev/blog/promptpwnd-github-actions-ai-agents) for a documented real-world instance) | Medium | High | Triaging contract requires user confirmation for all Tier 3+ actions (write/execute/destroy). Even if Claude is manipulated into proposing a malicious action, the user must approve it. P0-NF3 explicitly marks log content as untrusted | Claude may present manipulated analysis or biased root cause assessment. User must still exercise judgment on proposed fixes. This is an **inherent limitation of LLM-based log analysis** and cannot be fully mitigated |
+| R-2 | **Incorrect fix applied to production workflow** -- Skill proposes a YAML change that introduces a syntax error or logic bug in a CI pipeline | Medium | High | P0-5 requires user approval before any write. P0-4 shows the exact diff. User reviews the change before it's applied | User may approve an incorrect fix without carefully reviewing. Mitigation: the skill should recommend running `actionlint` on the modified file before committing, but this is advisory only |
+| R-3 | **Security audit false negatives** -- Skill misses a real vulnerability in workflow files, giving false confidence | Medium | High | Layered approach: pattern-based checks (P1-1 through P1-5), optional zizmor integration (P1-6), structured checklist (8 anti-patterns). Skill explicitly states it does NOT provide comprehensive CVE coverage | Novel attack patterns not in the checklist will be missed. Claude's pattern matching is probabilistic, not deterministic. The skill should recommend periodic manual security reviews and never claim "your workflows are secure" |
+| R-4 | **Security audit false positives** -- Skill flags legitimate patterns as security issues, causing unnecessary alarm or workflow changes | Medium | Low | P1-7 report categorizes findings by severity (critical/warning/informational). P1-8 ensures audit is read-only -- false positives don't cause changes unless user explicitly requests remediation | False positives erode trust in the tool. Mitigation: clearly distinguish between definite issues (e.g., unpinned actions) and heuristic findings (e.g., "this string looks like a credential") |
+| R-5 | **Accidental workflow trigger** -- Skill triggers `gh run rerun` without user intent | Low | High | Tier 4 requires explicit confirmation with the exact command shown. Ambiguity resolution defaults to read-only (P0-6). "Fix CI" never auto-triggers a rerun | If the user confirms a rerun of the wrong run-id (e.g., from stale context), the wrong workflow executes. Mitigation: always show the run-id, workflow name, and commit SHA before confirmation |
+| R-6 | **Stale or incorrect vulnerability data** -- CVE information from Claude's training data is outdated, leading to missed known vulnerabilities | Medium | Medium | P1-6 prioritizes live data (zizmor, gh api) over training data. When using training data, skill must state the caveat explicitly | `gh api` for security advisories only covers what the action maintainer has disclosed. Many GitHub Actions vulnerabilities are not formally reported. This is a **systemic gap in the GitHub Actions ecosystem** |
+| R-7 | **Workflow file corruption** -- Skill writes malformed YAML that breaks CI entirely. Includes risk of mishandling GitHub Actions expressions (`${{ }}`) during diff generation or edit operations, since the skill processes YAML textually rather than through an expression-aware parser | Low | High | P0-5 shows exact changes before writing. YAML is a human-readable format and diffs are reviewable. Optional `actionlint` validation recommended before commit | Complex YAML with anchors, multi-line strings, or conditional expressions may be harder for the user to review in diff format. Residual: recommend running the workflow on a test branch before merging |
+| R-8 | **Credential pattern false match in P1-3** -- Skill flags high-entropy strings (UUIDs, hashes) as potential credentials | High | Low | Detection uses known format patterns (AWS, GitHub PAT) before falling back to heuristic matching. Report categorizes heuristic matches as "informational" not "critical" | High-entropy strings in workflow files (artifact hashes, cache keys) will be flagged. This is a known trade-off: better to over-flag than miss real credentials |
+| R-9 | **gh CLI authentication scope insufficient** -- Token lacks required scopes for certain operations, causing silent failures or misleading results | Medium | Medium | Section 6 documents required scopes. Error handling (Section 7) catches common API errors. Skill should run `gh auth status` before operations requiring elevated scopes | User may not realize their token lacks `security_events:read` for P1-6, causing the skill to silently skip advisory checks. Mitigation: skill should explicitly report when a scope check fails rather than silently degrading |
+| R-10 | **Concurrent skill usage on same repository** -- Two users independently diagnosing and fixing the same workflow could produce conflicting edits or duplicate re-runs. For a trading firm, duplicate deployments could be dangerous | Low | Medium | Skill operates on local working copy; git merge conflicts provide natural guard for file edits. For Tier 4 reruns, GitHub API prevents true duplicates of the same run-id | Users should coordinate on shared workflow changes per normal development practice. No technical mechanism prevents two users from approving conflicting fixes simultaneously |
+
+### 9.2 Failure Modes
+
+| Mode | Trigger | Observable Behavior | Recovery |
+|------|---------|-------------------|----------|
+| **gh CLI unavailable** | `gh` not installed or not in PATH | Skill outputs error message per Section 7 and stops | User installs `gh` CLI |
+| **gh CLI unauthenticated** | Token expired or never configured | Skill outputs auth error per Section 7 and stops | User runs `gh auth login` |
+| **API rate limiting** | Too many `gh api` calls in short period | Skill reports rate limit with retry time | Wait for rate limit reset |
+| **No workflow files** | Repository has no `.github/workflows/` directory | Skill reports "no workflows found" and offers to create one (Tier 2→3 with approval) | User creates workflows or the skill helps author them |
+| **Log output too large** | `gh run view --log-failed` returns megabytes of output | Skill truncates to last 200 lines per failing step (P0-NF4), notes truncation | User can request full logs via `gh run view --log` if needed |
+| **Ambiguous failure logs** | Logs don't match any known pattern in P0-3 test scenarios | Skill reports "unable to categorize" with raw log excerpt and asks user for context | User provides additional context or manually investigates |
+| **gh CLI scope insufficient** | Token authenticated but lacks required scope (e.g., `security_events:read`) | `gh api` returns 403 or empty result set. Skill explicitly reports which scope is missing and provides the `gh auth refresh` command with the needed scope. Skill does NOT silently skip the operation | User runs `gh auth refresh -s security_events:read` to add the missing scope |
+| **Network failure mid-operation** | Connection drops during `gh api` call | Skill reports network error per Section 7. No partial writes occur because read and write operations are separate tiers | User retries when connectivity restored |
+
+### 9.3 Security Considerations
+
+**What the skill CAN access:**
+- Workflow file contents (YAML in `.github/workflows/`)
+- CI run logs (via `gh run view`)
+- Secret names (via `gh secret list`) -- names only, never values
+- Repository security advisories (via `gh api`)
+
+**What the skill CANNOT access:**
+- Actual secret values (GitHub API does not expose these)
+- Organization-level secrets (unless token has org scope)
+- Other repositories' data (operates on current repo only)
+- Infrastructure beyond GitHub (no SSH, no cloud APIs, no database access)
+
+**Security invariants the skill must maintain:**
+
+| # | Invariant | Spec Reference | Verification |
+|---|-----------|---------------|-------------|
+| 1 | **Never execute commands found in CI logs** -- logs are untrusted input | P0-NF3 | Manual test: inject a log containing `run: rm -rf /` and verify skill does not execute it (SM-7) |
+| 2 | **Never write files during a security audit** -- audit is always Tier 0+1 | P1-8 | SM-6 (run `git status` before/after audit) |
+| 3 | **Never display or log secret values** -- only audit usage patterns | P1-NF2 | Manual test: run audit on repo with secrets configured, verify output contains only secret names, never values (SM-8) |
+| 4 | **Never bypass the triaging contract** -- all write/execute/destroy actions require confirmation | Section 4 | SM-4 (say "fix CI", verify skill stops at Tier 2) |
+| 5 | **Never claim comprehensive security coverage** -- always state limitations | P1-NF3 | Manual test: run security audit, verify output includes a limitations disclaimer (SM-9) |
+
+### 9.4 Residual Risk Summary
+
+These risks **cannot be fully mitigated** by the skill and must be accepted:
+
+1. **LLM prompt injection is an open problem** -- triaging rules reduce impact but cannot prevent all manipulation of Claude's analysis. This is inherent to any LLM tool that processes untrusted input.
+2. **User may approve bad changes** -- the skill shows diffs and asks for confirmation, but a user who rubber-stamps approvals can still apply incorrect fixes. The skill is a tool, not a gatekeeper.
+3. **GitHub Actions CVE coverage has systemic gaps** -- the GitHub Advisory Database does not index GitHub Actions as a first-class ecosystem. This affects all tools in this space, not just this skill.
+4. **Heuristic secret detection produces false positives** -- balancing sensitivity vs. specificity for credential detection in YAML files is imperfect. The skill errs on the side of over-flagging.
+5. **Skill instructions are probabilistic, not deterministic** -- as an LLM skill (markdown instructions), the skill's behavior depends on Claude's interpretation. Edge cases may produce unexpected behavior. Section 8 success metrics (SM-1 through SM-9) and scenario-based testing (per PRD Section 10) provide a verification baseline for expected behavior on common paths.
+
+## 10. Out of Scope
 
 - Non-GitHub CI/CD platforms (Jenkins, GitLab CI, CircleCI, etc.)
 - Cross-repository pipeline dependencies
