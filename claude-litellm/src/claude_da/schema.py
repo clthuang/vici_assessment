@@ -7,10 +7,13 @@ schema as human-readable text for LLM consumption.
 
 from __future__ import annotations
 
+import re
 import sqlite3
 from dataclasses import dataclass, field
 
 from claude_da.exceptions import ConfigurationError
+
+_SAFE_TABLE_NAME = re.compile(r"^[a-zA-Z_][a-zA-Z0-9_]*$")
 
 # --- Schema dataclasses ----------------------------------------------------
 
@@ -171,7 +174,9 @@ def _discover_columns(conn: sqlite3.Connection, table_name: str) -> list[ColumnI
     Returns:
         Ordered list of ColumnInfo for the table.
     """
-    cursor = conn.execute(f"PRAGMA table_info({table_name})")
+    if not _SAFE_TABLE_NAME.match(table_name):
+        return []
+    cursor = conn.execute(f"PRAGMA table_info({table_name})")  # noqa: S608
     columns: list[ColumnInfo] = []
     for row in cursor.fetchall():
         # PRAGMA table_info returns: cid, name, type, notnull, dflt_value, pk
@@ -194,7 +199,9 @@ def _discover_foreign_keys(
     Returns:
         List of ForeignKey relationships for the table.
     """
-    cursor = conn.execute(f"PRAGMA foreign_key_list({table_name})")
+    if not _SAFE_TABLE_NAME.match(table_name):
+        return []
+    cursor = conn.execute(f"PRAGMA foreign_key_list({table_name})")  # noqa: S608
     foreign_keys: list[ForeignKey] = []
     for row in cursor.fetchall():
         # PRAGMA foreign_key_list returns:

@@ -8,7 +8,7 @@ with mocked initialization.
 from __future__ import annotations
 
 import json
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 from litellm.llms.custom_llm import CustomLLMError
@@ -64,7 +64,7 @@ async def test_oversized_input_error_format() -> None:
             api_base="",
             custom_prompt_dict={},
             model_response=AsyncMock(),
-            print_verbose=lambda *a: None,
+            print_verbose=MagicMock(),
             encoding=None,
             api_key=None,
             logging_obj=AsyncMock(),
