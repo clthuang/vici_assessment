@@ -1,0 +1,21 @@
+{
+  "id": "1",
+  "slug": "github-cicd-guardian",
+  "mode": "standard",
+  "status": "active",
+  "created": "2026-02-07T00:00:00.000Z",
+  "branch": "feature/github-claude-skills",
+  "brainstorm_source": "docs/brainstorms/20260207-github-cicd-skill.prd.md",
+  "currentPhase": "specify",
+  "phases": {
+    "specify": {
+      "started": "2026-02-07T00:10:00.000Z",
+      "completed": "2026-02-07T00:20:00.000Z",
+      "iterations": 1,
+      "reviewerNotes": [
+        "Spec-reviewer found 4 blockers at iteration 1 (max for standard mode). All 4 addressed in revision.",
+        "Phase-reviewer approved with 4 warnings and 3 suggestions. Remaining: token scopes, secret detection patterns, anti-pattern mapping, V2 boundary."
+      ]
+    }
+  }
+}
