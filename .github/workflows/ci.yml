@@ -97,10 +97,39 @@ jobs:
           name: dist
           path: subterminator/dist/
 
+  claude-litellm:
+    name: Claude-LiteLLM
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: claude-litellm
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v3
+
+      - name: Install dependencies
+        run: uv sync
+
+      - name: Run ruff check
+        run: uv run ruff check src/ tests/
+
+      - name: Run ruff format check
+        run: uv run ruff format --check src/ tests/
+
+      - name: Run unit tests
+        run: uv run pytest tests/unit/ -v
+
   create-pr:
     name: Create PR
     runs-on: ubuntu-latest
-    needs: [lint, test, build]
+    needs: [lint, test, build, claude-litellm]
     if: |
       github.event_name == 'push' &&
       (startsWith(github.ref, 'refs/heads/feature/') ||
