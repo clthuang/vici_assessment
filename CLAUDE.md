@@ -32,6 +32,7 @@ stock-backtester/        # Stock Backtester project
     report.py            # Output formatting (table/JSON)
     cli.py               # CLI entry point (Typer)
   tests/                 # Test suite (88 tests, 93% coverage)
+  docs/                  # Technical guide, feature specs
   pyproject.toml         # Project config
 github-claude-skills/    # Claude Code skill plugin
   .claude-plugin/        # Plugin manifest (plugin.json)
