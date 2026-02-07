@@ -52,18 +52,16 @@
     },
     "create-tasks": {
       "started": "2026-02-07T16:00:00Z",
-      "completed": "2026-02-07T16:25:00Z",
+      "completed": "2026-02-07T16:35:00Z",
       "taskReview": {
         "iterations": 1,
         "approved": true,
         "concerns": []
       },
       "chainReview": {
+        "iterations": 2,
         "approved": true,
-        "concerns": [
-          "T-021 and T-027 exceed 15-min guideline but are unambiguous — acceptable",
-          "Phase 2 Groups 2.1 and 2.2 can start in parallel — summary updated"
-        ]
+        "concerns": []
       }
     }
   }

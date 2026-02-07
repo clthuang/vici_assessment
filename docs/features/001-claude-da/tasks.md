@@ -66,7 +66,7 @@
 
 - [ ] **T-011**: Implement `schema.py` — `ColumnInfo`, `ForeignKey`, `TableSchema`, `DatabaseSchema` dataclasses per design Section 2.3
   - **Done when**: All 4 dataclasses importable with correct fields
-  - **Depends on**: T-003
+  - **Depends on**: T-002
 
 - [ ] **T-012**: Implement `discover_schema(db_path)` in `schema.py` — open read-only SQLite (`?mode=ro`), query `sqlite_master` for table names, `PRAGMA table_info` for columns, `PRAGMA foreign_key_list` for FKs. Raise `ConfigurationError` if DB cannot be opened or schema is empty.
   - **Done when**: `discover_schema(test_db)` returns `DatabaseSchema` with correct tables, columns, types, and FK relationships; raises `ConfigurationError` on nonexistent file
@@ -114,23 +114,27 @@
   - **Done when**: Constructor accepts `ClaudeDAConfig` and `str`, stores as instance attributes
   - **Depends on**: T-005, T-019
 
-- [ ] **T-021**: Implement `DataAnalystAgent.run()` in `agent.py` — build `ClaudeAgentOptions` (system_prompt, model, max_turns, max_budget_usd, mcp_servers as plain dict, allowed_tools `["mcp__sqlite__*"]`, disallowed_tools `["Bash", "Write", "Edit"]`, permission_mode `"bypassPermissions"`), wrap `query()` in `asyncio.wait_for(timeout=240)`, iterate messages (accumulate text from AssistantMessage, capture SQL from tool use blocks matching `mcp__sqlite__*`, capture query results from tool result messages, extract metadata from ResultMessage with null-safe usage handling), return `AgentResult`. Map `asyncio.TimeoutError` → `AgentTimeoutError`, SDK errors → appropriate exceptions. **Note**: The spec's `query_timeout` error code (30s MCP timeout) is handled natively by the MCP server within the agent loop (design Section 1.5) — no separate provider-level exception is needed.
-  - **Done when**: Method exists with complete implementation; unit test with mocked SDK passes
+- [ ] **T-021a**: Implement `DataAnalystAgent._build_options()` in `agent.py` — build `ClaudeAgentOptions` with system_prompt, model, max_turns, max_budget_usd, mcp_servers as plain dict (`{"sqlite": {"command": "npx", "args": ["-y", "@modelcontextprotocol/server-sqlite", db_path]}}`), allowed_tools `["mcp__sqlite__*"]`, disallowed_tools `["Bash", "Write", "Edit"]`, permission_mode `"bypassPermissions"`.
+  - **Done when**: Method returns a valid `ClaudeAgentOptions` with all 8 configuration fields set correctly
   - **Depends on**: T-018, T-019, T-020
 
-- [ ] **T-022**: Write unit tests for agent core — `_messages_to_prompt` (single msg, multi-turn, system filtered), `DataAnalystAgent` construction with mock config, `run()` with mocked `query()` returning mock AssistantMessage + ResultMessage sequences, verify AgentResult contains correct text/sql/metadata. Test timeout mapping.
-  - **Done when**: `uv run pytest tests/unit/test_agent.py -v` passes (5+ test cases)
-  - **Depends on**: T-021
+- [ ] **T-021b**: Implement `DataAnalystAgent.run()` in `agent.py` — call `_build_options()`, wrap `query()` in `asyncio.wait_for(timeout=240)`, iterate `AsyncIterator[Message]` (accumulate text from AssistantMessage, capture SQL from tool use blocks matching `mcp__sqlite__*`, capture query results from tool result messages, extract metadata from ResultMessage with null-safe usage handling), return `AgentResult`. Map `asyncio.TimeoutError` → `AgentTimeoutError`, SDK errors → appropriate exceptions. **Note**: The spec's `query_timeout` error code (30s MCP timeout) is handled natively by the MCP server within the agent loop (design Section 1.5) — no separate provider-level exception is needed.
+  - **Done when**: Method exists with complete implementation; correctly iterates SDK messages and returns populated AgentResult
+  - **Depends on**: T-021a
+
+- [ ] **T-022**: Write unit tests for agent core — `_messages_to_prompt` (single msg, multi-turn, system filtered), `DataAnalystAgent` construction with mock config, `_build_options()` returns correct config, `run()` with mocked `query()` returning mock AssistantMessage + ResultMessage sequences, verify AgentResult contains correct text/sql/metadata. Test timeout mapping.
+  - **Done when**: `uv run pytest tests/unit/test_agent.py -v` passes (6+ test cases)
+  - **Depends on**: T-021b
 
 - [ ] **T-023**: Write integration test for agent smoke test — `DataAnalystAgent.run()` with real API key against demo.db, ask "How many customers are there?", verify response contains a number, verify `sql_queries` is non-empty, verify metadata has cost/duration
   - **Done when**: `uv run pytest tests/integration/test_agent_smoke.py -v` passes (skipped if no API key)
-  - **Depends on**: T-021, T-009
+  - **Depends on**: T-021b, T-009
 
 ### Group 3.2 — Agent Streaming (sequential after 3.1)
 
 - [ ] **T-024**: Implement `DataAnalystAgent.run_streaming()` in `agent.py` — async generator yielding `GenericStreamingChunk` dicts (`text`, `is_finished`, `finish_reason`, `index`, `tool_use: None`). Intermediate chunks: `is_finished=False`. Final chunk: `is_finished=True`, `finish_reason="stop"`, `usage` from ResultMessage (null-safe). Accumulates AgentResult in passed-in `result_holder` list.
   - **Done when**: Method exists with complete implementation
-  - **Depends on**: T-021
+  - **Depends on**: T-021b
 
 - [ ] **T-025**: Write unit tests for streaming — mock Agent SDK messages, verify chunk sequence (intermediate chunks have text, final chunk has `is_finished=True`), verify result_holder populated with AgentResult after iteration
   - **Done when**: `uv run pytest tests/unit/test_agent.py::TestStreaming -v` passes
@@ -148,19 +152,23 @@
 
 ### Group 4.1 — Provider Structure (sequential)
 
-- [ ] **T-027**: Implement `ClaudeDAProvider(CustomLLM)` in `provider.py` — `__init__` (sets `_initialized=False`, `_init_lock`, `_init_error=None`), `_ensure_initialized()` with double-check locking (load config, discover schema, verify read-only, build prompt, create agent + audit logger; on failure cache error in `_init_error`), `completion()` and `streaming()` → `raise NotImplementedError`, `_handle_error()` translates `ClaudeDAError` → `CustomLLMError` with OpenAI error JSON format. Module-level instance: `claude_da_provider = ClaudeDAProvider()`.
-  - **Done when**: Module importable, `claude_da_provider` is `CustomLLM` instance, sync methods raise `NotImplementedError`
-  - **Depends on**: T-021, T-016, T-012, T-013, T-007
+- [ ] **T-027a**: Implement `ClaudeDAProvider(CustomLLM)` shell in `provider.py` — `__init__` (sets `_initialized=False`, `_init_lock=asyncio.Lock()`, `_init_error=None`), `completion()` and `streaming()` → `raise NotImplementedError`, `_handle_error()` translates `ClaudeDAError` → `CustomLLMError` with OpenAI error JSON format (`error.message`, `error.type`, `error.code`). Module-level instance: `claude_da_provider = ClaudeDAProvider()`.
+  - **Done when**: Module importable, `claude_da_provider` is `CustomLLM` instance, sync methods raise `NotImplementedError`, `_handle_error()` produces correct JSON for each exception type
+  - **Depends on**: T-003
+
+- [ ] **T-027b**: Implement `_ensure_initialized()` in `provider.py` — double-check locking pattern: load config, discover schema, verify read-only, build prompt, create `DataAnalystAgent` + `AuditLogger`. On failure: cache error in `_init_error`; subsequent calls return cached error immediately without retrying.
+  - **Done when**: First call initializes all components; failure is cached; second call after failure returns same error without re-running init
+  - **Depends on**: T-027a, T-021b, T-016, T-012, T-013, T-007
 
 - [ ] **T-028**: Write unit tests for provider structure — `claude_da_provider` is `CustomLLM` subclass, `completion()` raises `NotImplementedError`, `streaming()` raises `NotImplementedError`, `_handle_error()` produces correct OpenAI error JSON for each exception type, init failure is cached (second call returns same error without retrying)
   - **Done when**: `uv run pytest tests/unit/test_provider.py -v` passes (5+ test cases)
-  - **Depends on**: T-027
+  - **Depends on**: T-027b
 
 ### Group 4.2 — acompletion (parallel with 4.3, after 4.1)
 
 - [ ] **T-029**: Implement `acompletion()` in `provider.py` — `_ensure_initialized()`, validate input length (`InputValidationError` if exceeded), call `agent.run(messages)`, format as `ModelResponse` (set `choices[0].message.content`), fire-and-forget `asyncio.create_task(audit.log(...))` with `task.add_done_callback()` for exception suppression
   - **Done when**: Method handles full request lifecycle
-  - **Depends on**: T-027
+  - **Depends on**: T-027b
 
 - [ ] **T-030**: Write unit tests for acompletion — oversized input returns 400 with correct JSON body, mock `agent.run()` → valid `ModelResponse` with `choices[0].message.content`, audit task is created (mock audit logger)
   - **Done when**: `uv run pytest tests/unit/test_provider.py::TestAcompletion -v` passes
@@ -170,7 +178,7 @@
 
 - [ ] **T-031**: Implement `astreaming()` in `provider.py` — `_ensure_initialized()`, validate input length, create `result_holder = [None]`, call `agent.run_streaming(messages, result_holder)`, yield all chunks, after iteration fire-and-forget audit log from `result_holder[0]`
   - **Done when**: Method yields chunks and triggers audit after final chunk
-  - **Depends on**: T-027
+  - **Depends on**: T-027b
 
 - [ ] **T-032**: Write unit tests for astreaming — mock streaming returns valid chunk sequence ending with `is_finished=True`, audit log receives accumulated result from result_holder, oversized input returns 400
   - **Done when**: `uv run pytest tests/unit/test_provider.py::TestAstreaming -v` passes
@@ -198,7 +206,7 @@
   - **Done when**: README contains all 4 sections, commands are copy-pasteable
   - **Depends on**: T-033
 
-### Group 5.2 — Integration Tests Finalization (sequential after 5.1)
+### Group 5.2 — Integration Tests Finalization (parallel with 5.1, after Phase 4)
 
 - [ ] **T-036**: Write integration test for non-data question — send "What's 2+2?" via provider, verify response is conversational, verify no SQL queries in audit result
   - **Done when**: `uv run pytest tests/integration/test_non_data.py -v` passes (skipped if no API key)
@@ -227,8 +235,8 @@
 | Phase | Tasks | Groups |
 |---|---|---|
 | 1: Scaffold + Foundations | T-001 – T-008 (8 tasks) | 4 sequential groups (1.1→1.2→1.3→1.4) |
-| 2: Schema + Prompt | T-009 – T-017 (9 tasks) | 3 groups (2.1 ∥ 2.2 start, merge at T-015, then 2.3) |
-| 3: Agent SDK | T-018 – T-026 (9 tasks) | 2 sequential groups (3.1→3.2) |
-| 4: LiteLLM Provider | T-027 – T-034 (8 tasks) | 3 groups (4.1, then 4.2 ∥ 4.3, then 4.4) |
+| 2: Schema + Prompt | T-009 – T-017 (9 tasks) | 3 groups (2.1 independent, 2.2 sequential, then 2.3 after 2.2; 2.1 feeds Phase 3 integration) |
+| 3: Agent SDK | T-018 – T-026 (10 tasks) | 2 sequential groups (3.1→3.2) |
+| 4: LiteLLM Provider | T-027 – T-034 (9 tasks) | 3 groups (4.1, then 4.2 ∥ 4.3, then 4.4) |
 | 5: Demo + Docs | T-035 – T-039 (5 tasks) | 3 sequential groups (5.1→5.2→5.3) |
-| **Total** | **39 tasks** | **1 parallel pair (4.2 ∥ 4.3)** |
+| **Total** | **41 tasks** | **1 parallel pair (4.2 ∥ 4.3)** |
