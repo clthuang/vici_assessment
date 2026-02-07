@@ -2,7 +2,7 @@
 
 **Feature:** 001-stat-arb-backtester
 **Plan Version:** v2
-**Tasks Version:** v3
+**Tasks Version:** v4
 
 ---
 
@@ -37,12 +37,13 @@
 - **File:** `src/stock_backtester/types.py`
 - **Do:** Implement all 10 dataclasses/enums from spec Section 2: `OutputFormat`, `BacktestConfig`, `SimulationConfig`, `PriceData`, `BacktestResult`, `KellyResult`, `FrontierRow`, `MetricsResult`, `SimulationResult`, `VerificationResult`. All result types `@dataclass(frozen=True)`.
 - **Note:** Exception classes (`DataError`, `StrategyError`, `KellyError`, `SimulationError`) are NOT in types.py — they are co-located in their respective domain modules (data.py, strategy.py, kelly.py, simulation.py) per design TD-3.
+- **Note:** `BacktestConfig` and `SimulationConfig` are frozen dataclasses with NO Python default values — all fields are required at construction. The "defaults" in spec comments (commission=0.001, slippage_k=0.5, etc.) are CLI-level Typer `Option(default=...)` values applied in cli.py (Task 10.2a), not dataclass field defaults.
 - **Done when:** `from stock_backtester.types import BacktestConfig, PriceData, ...` works for all 10 types.
 - **Est:** ~10 min
 
 ### Task 1.2: Write test_types.py
 - **File:** `tests/test_types.py`
-- **Do:** Tests: (a) frozen dataclasses reject `setattr`, (b) `BacktestConfig` defaults match spec (commission=0.001, slippage_k=0.5, etc.), (c) `OutputFormat.TABLE` and `OutputFormat.JSON` exist.
+- **Do:** Tests: (a) frozen dataclasses reject `setattr`, (b) `BacktestConfig` has no Python default values — constructing with missing required fields raises `TypeError`, (c) `OutputFormat.TABLE` and `OutputFormat.JSON` exist.
 - **Note:** Phase 1 is implementation-before-tests (inverted TDD) because types.py defines data structures with no logic — tests validate the schema rather than drive behavior. All subsequent phases follow RED-GREEN-REGRESSION.
 - **Done when:** `uv run pytest tests/test_types.py` passes.
 - **Est:** ~5 min
@@ -70,7 +71,7 @@
   - `test_multi_symbol_simple_returns`: 2-symbol DataFrame → correct shapes
   - `test_multi_symbol_log_returns`: 2-symbol DataFrame → correct shapes
   - `test_trailing_vol_constant`: `[100, 100, 100, 100, 100]` (log returns all 0) → trailing vol = 0.0
-  - `test_trailing_vol_alternating`: `[100, 101, 100, 101, 100]` → log returns alternate `[ln(1.01), ln(100/101), ln(1.01), ln(100/101)]`, expanding std(ddof=1) computable → assert exact values at each bar
+  - `test_trailing_vol_alternating`: `[100, 101, 100, 101, 100]` → log returns: `r = [ln(1.01), ln(100/101), ln(1.01), ln(100/101)]` where `ln(1.01) ≈ 0.009950` and `ln(100/101) ≈ -0.009950`. Pre-computed expected trailing vol (expanding std, ddof=1): bar 1 = NaN (1 obs, < min_periods=2), bar 2 = `std([r0, r1], ddof=1) ≈ 0.014072`, bar 3 = `std([r0, r1, r2], ddof=1) ≈ 0.011494`, bar 4 = `std([r0..r3], ddof=1) ≈ 0.011475`. Assert each bar within 1e-5
   - `test_trailing_vol_insufficient`: single observation (bar 1) → NaN (< 2 observations for expanding std)
   - `test_costs_zero_delta`: zero delta_w → zero cost
   - `test_costs_known_slippage`: `delta_w=0.5, k=0.5, sigma=0.02` → slippage = `0.5 * 0.02 * 0.5 = 0.005`
@@ -184,7 +185,7 @@
   - `test_net_leq_gross`: net <= gross for all bars with trade
   - `test_warmup_end_idx_equal_weight`: warmup_end_idx == 1 for EqualWeight
   - `test_equity_starts_at_one`: equity_curve.iloc[warmup_end_idx] == 1.0
-  - `test_cost_approximation_bound`: first-trade cost < 1% of bar return
+  - `test_cost_approximation_bound`: first-trade cost per bar < 0.01 (absolute threshold, i.e., < 1% of portfolio value). Uses EqualWeight on 2+ symbols with spec defaults (commission=0.001, slippage_k=0.5) and synthetic prices with trailing vol ~ 0.02
 - **Done when:** All tests exist and fail.
 - **Est:** ~10 min
 
@@ -226,7 +227,7 @@
 - **File:** `tests/test_metrics.py`
 - **Do:** Write failing tests:
   - `test_sharpe_known_series`: `[0.01, -0.005, 0.008, -0.002, 0.003]` → mean=0.0028, std(ddof=1)=0.006181, Sharpe = `(0.0028*252) / (0.006181*sqrt(252)) ≈ 7.19` within 0.01
-  - `test_sortino_all_positive`: all positive returns → Sortino uses full-count convention (DD denominator = `sqrt((1/N)*sum(min(r,0)^2))` = 0 → Sortino = inf or capped)
+  - `test_sortino_all_positive`: all positive returns → DD denominator = `sqrt((1/N)*sum(min(r,0)^2))` = 0.0 → Sortino = `float('inf')`. `metrics.py` returns `float('inf')`; `report.py` displays "inf" in TABLE output and `null` or `"Infinity"` in JSON
   - `test_max_drawdown_known`: `[0.01, -0.03, -0.02, 0.05]` → equity peaks at bar 0: `exp(0.01)=1.01005`, drops at bar 1: `exp(0.01-0.03)=0.98020`, trough at bar 2: `exp(0.01-0.03-0.02)=0.96079`. Max DD = `1 - 0.96079/1.01005 ≈ 0.04877`. Duration = 3 trading days (peak at bar 0, recovery at bar 3 where equity `exp(0.01-0.03-0.02+0.05)=1.01005` returns to peak; per spec: "longest period from peak to recovery" = bars 1, 2, 3 elapsed).
   - `test_win_rate`: 3 positive, 2 negative, 1 zero → 3/5 = 0.6 (zero excluded from count)
   - `test_sharpe_zero_returns`: all zero returns → Sharpe = 0 (not NaN)
@@ -323,8 +324,8 @@
   - `test_gbm_determinism`: same seed → same output
   - `test_calibration_known_returns`: known returns → known mu/sigma within tolerance
   - `test_multi_symbol_different_subseeds`: different sub-seeds per symbol (paths differ)
-  - `test_ruin_detection_breach`: known path breaching drawdown → detected
-  - `test_ruin_detection_no_breach`: path above threshold → not flagged
+  - `test_ruin_detection_breach`: Construct a synthetic equity curve that breaches the drawdown threshold (e.g., peak=1.0, trough=0.40, drawdown_level=0.50 → 60% drawdown > 50% threshold). Extract `check_ruin` as a module-level helper function `check_ruin(equity_curve: pd.Series, drawdown_level: float) -> bool` and test it directly. If `check_ruin` is inlined in `run_monte_carlo`, extract it for testability.
+  - `test_ruin_detection_no_breach`: Construct equity curve that stays above threshold (e.g., peak=1.0, min=0.60 → 40% drawdown < 50% threshold) → `check_ruin` returns False
 - **Done when:** All tests exist and fail.
 - **Est:** ~10 min
 
@@ -332,7 +333,7 @@
 - **File:** `tests/test_integration.py` (append)
 - **Do:** Add:
   - `test_ac6_gbm_moments`: mu=0.10, sigma=0.20, 200 paths, seed=42 → mean and std within 2 SE
-  - `test_ac7_zero_edge_sharpe`: 4 symbols, mu=0, EqualWeight, zero costs → Sharpe within 2 SE of 0
+  - `test_ac7_zero_edge_sharpe`: 4 symbols, mu=0, EqualWeight, zero costs → per-path Sharpe computed inline from each path's daily net returns: `sharpe_p = mean(r) * 252 / (std(r, ddof=1) * sqrt(252))` (same formula as `compute_metrics` but computed directly, NOT by calling `compute_metrics`). `mean_sharpe = mean(sharpe_p)`, `SE = std(sharpe_p) / sqrt(n_paths)`. Assert `abs(mean_sharpe) < 2 * SE`
 - **Done when:** Both tests exist and fail.
 - **Est:** ~10 min
 
@@ -354,6 +355,7 @@
   - Generate paths
   - Loop: construct synthetic PriceData per path, run backtest, check ruin at half_kelly
   - Compute empirical and theoretical ruin rate (portfolio-level mu/sigma)
+- **Note:** The Monte Carlo loop (`run_monte_carlo`) is tested via: (1) `test_ruin_detection_breach` / `test_ruin_detection_no_breach` (Task 8.2) which test the extracted `check_ruin` helper directly, (2) `test_ac7_zero_edge_sharpe` (Task 8.3) which exercises the full loop end-to-end (generates paths, runs per-path backtests, computes per-path Sharpe), and (3) `test_cli_simulate` (Task 10.1) which exercises the CLI → `run_monte_carlo` integration.
 - **Done when:** `uv run pytest tests/test_simulation.py tests/test_integration.py -k "ac6 or ac7 or ruin_detection"` all pass.
 - **Est:** ~15 min
 
@@ -409,7 +411,7 @@
 - **Do:** Write failing tests using `typer.testing.CliRunner`:
   - `test_cli_verify`: `backtest verify` → exit code 0, all "PASS" in output
   - `test_cli_run_json`: `backtest run --symbols TEST --json` (mock yfinance) → valid JSON
-  - `test_cli_simulate`: `backtest simulate --symbols TEST --paths 10 --seed 42` (mock yfinance) → exit code 0, "ruin" in output (tests Task 10.2b's simulate command)
+  - `test_cli_simulate`: `backtest simulate --symbols TEST --paths 10 --seed 42` (mock yfinance returning >= 30 bars of 1% daily growth for single symbol "TEST": `close = 100 * 1.01^t` for t=0..59, open=high=low=close, volume=1e6, DatetimeIndex via `pd.bdate_range`) → exit code 0, "ruin" in output (tests Task 10.2b's simulate command)
   - `test_cli_invalid_symbol`: invalid symbol → exit code 1, error message
   - `test_cli_help`: `--help` → shows usage without error
 - **Done when:** All tests exist and fail.
@@ -428,6 +430,7 @@
 - **File:** `src/stock_backtester/cli.py`
 - **Do:** Add `simulate` command: parse → fetch → strategy → run_monte_carlo → format_simulation_report → print
 - **Note:** `simulate` calls `run_monte_carlo()` which internally runs a historical backtest + compute_kelly to get half_kelly, then calibrates GBM and runs the Monte Carlo loop. The CLI does NOT separately call run_backtest/compute_kelly — that redundancy is encapsulated inside run_monte_carlo.
+- **Note (design departure):** The design's Pipeline 2 sequence diagram (design.md Section 1.4) shows CLI calling `run_backtest` and `compute_kelly` before `run_monte_carlo`. However, per spec Section 3.7, `run_monte_carlo` runs these internally. The CLI simply calls: `fetch_prices → get_strategy → run_monte_carlo → format_simulation_report`. This simplifies the CLI and matches the spec's interface contract.
 - **Done when:** `uv run pytest tests/test_cli.py` all pass.
 - **Est:** ~10 min
 
