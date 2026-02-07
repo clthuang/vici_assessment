@@ -55,7 +55,7 @@
       "started": "2026-02-07T00:00:00Z",
       "completed": "2026-02-07T00:00:00Z",
       "taskReview": {
-        "iterations": 4,
+        "iterations": 5,
         "approved": true,
         "concerns": []
       },

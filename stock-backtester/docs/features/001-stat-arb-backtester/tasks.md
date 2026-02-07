@@ -2,7 +2,7 @@
 
 **Feature:** 001-stat-arb-backtester
 **Plan Version:** v2
-**Tasks Version:** v4
+**Tasks Version:** v5
 
 ---
 
@@ -71,7 +71,7 @@
   - `test_multi_symbol_simple_returns`: 2-symbol DataFrame → correct shapes
   - `test_multi_symbol_log_returns`: 2-symbol DataFrame → correct shapes
   - `test_trailing_vol_constant`: `[100, 100, 100, 100, 100]` (log returns all 0) → trailing vol = 0.0
-  - `test_trailing_vol_alternating`: `[100, 101, 100, 101, 100]` → log returns: `r = [ln(1.01), ln(100/101), ln(1.01), ln(100/101)]` where `ln(1.01) ≈ 0.009950` and `ln(100/101) ≈ -0.009950`. Pre-computed expected trailing vol (expanding std, ddof=1): bar 1 = NaN (1 obs, < min_periods=2), bar 2 = `std([r0, r1], ddof=1) ≈ 0.014072`, bar 3 = `std([r0, r1, r2], ddof=1) ≈ 0.011494`, bar 4 = `std([r0..r3], ddof=1) ≈ 0.011475`. Assert each bar within 1e-5
+  - `test_trailing_vol_alternating`: `[100, 101, 100, 101, 100]` → log returns: `r = [ln(1.01), ln(100/101), ln(1.01), ln(100/101)]` where `ln(1.01) ≈ 0.009950` and `ln(100/101) ≈ -0.009950`. Pre-computed expected trailing vol (expanding std, **ddof=1** — sample std, same convention as Sharpe/annualized vol per spec Section 3.6): bar 1 = NaN (1 obs, < min_periods=2), bar 2 = `std([r0, r1], ddof=1) ≈ 0.014072`, bar 3 = `std([r0, r1, r2], ddof=1) ≈ 0.011494`, bar 4 = `std([r0..r3], ddof=1) ≈ 0.011475`. Assert each bar within 1e-5
   - `test_trailing_vol_insufficient`: single observation (bar 1) → NaN (< 2 observations for expanding std)
   - `test_costs_zero_delta`: zero delta_w → zero cost
   - `test_costs_known_slippage`: `delta_w=0.5, k=0.5, sigma=0.02` → slippage = `0.5 * 0.02 * 0.5 = 0.005`
@@ -201,7 +201,8 @@
 
 ### Task 5.4: Implement engine.py (GREEN)
 - **File:** `src/stock_backtester/engine.py`
-- **Do:** Implement `run_backtest(config, prices, strategy, slippage_k, commission_per_share)` following design's 8-step pipeline (Section 1.3):
+- **Do:** Implement `run_backtest(config: BacktestConfig, prices: PriceData, strategy: Strategy, slippage_k: float = 0.5, commission_per_share: float = 0.001) -> BacktestResult` following design's 8-step pipeline (Section 1.3). **Signature note:** Per spec Section 3.4 (lines 404-410), the function takes a `config` object AND separate `slippage_k`/`commission_per_share` params with Python defaults of 0.5 and 0.001 respectively. The config is used for metadata; the explicit params control cost model behavior.
+- **Pipeline:**
   1. **Copy prices, pass to strategy** — `{sym: df.copy() ...}`, call `strategy.compute_weights()`
   2. **Shift(1) weights** — `weights.shift(1).fillna(0.0)` (single temporal alignment point)
   3. **Simple returns per symbol** — via `compute_multi_symbol_simple_returns(prices)`
@@ -228,7 +229,7 @@
 - **Do:** Write failing tests:
   - `test_sharpe_known_series`: `[0.01, -0.005, 0.008, -0.002, 0.003]` → mean=0.0028, std(ddof=1)=0.006181, Sharpe = `(0.0028*252) / (0.006181*sqrt(252)) ≈ 7.19` within 0.01
   - `test_sortino_all_positive`: all positive returns → DD denominator = `sqrt((1/N)*sum(min(r,0)^2))` = 0.0 → Sortino = `float('inf')`. `metrics.py` returns `float('inf')`; `report.py` displays "inf" in TABLE output and `null` or `"Infinity"` in JSON
-  - `test_max_drawdown_known`: `[0.01, -0.03, -0.02, 0.05]` → equity peaks at bar 0: `exp(0.01)=1.01005`, drops at bar 1: `exp(0.01-0.03)=0.98020`, trough at bar 2: `exp(0.01-0.03-0.02)=0.96079`. Max DD = `1 - 0.96079/1.01005 ≈ 0.04877`. Duration = 3 trading days (peak at bar 0, recovery at bar 3 where equity `exp(0.01-0.03-0.02+0.05)=1.01005` returns to peak; per spec: "longest period from peak to recovery" = bars 1, 2, 3 elapsed).
+  - `test_max_drawdown_known`: `[0.01, -0.03, -0.02, 0.05]` → equity peaks at bar 0: `exp(0.01)=1.01005`, drops at bar 1: `exp(0.01-0.03)=0.98020`, trough at bar 2: `exp(0.01-0.03-0.02)=0.96079`. Max DD = `-(1 - 0.96079/1.01005) ≈ -0.04877` (**negative value** per spec: `max_drawdown: float  # negative value, e.g. -0.187`). Duration = 3 trading days (peak at bar 0, recovery at bar 3 where equity `exp(0.01-0.03-0.02+0.05)=1.01005` returns to peak; per spec: "longest period from peak to recovery" = bars 1, 2, 3 elapsed).
   - `test_win_rate`: 3 positive, 2 negative, 1 zero → 3/5 = 0.6 (zero excluded from count)
   - `test_sharpe_zero_returns`: all zero returns → Sharpe = 0 (not NaN)
   - `test_annualized_return`: known mean=0.001 → `exp(0.001 * 252) - 1 ≈ 0.28668` within 1e-4
@@ -362,7 +363,7 @@
 ### Task 8.5b: Implement run_verification_tests (GREEN part 3)
 - **File:** `src/stock_backtester/simulation.py`
 - **Do:** Implement `run_verification_tests(seed)` — runs AC-1 through AC-7 + AC-1b using the real engine pipeline with synthetic data. Returns `list[VerificationResult]`.
-- **Note:** `run_verification_tests` is tested indirectly through CLI `verify` command (Task 10.1: `test_cli_verify`) and by the AC integration tests themselves (test_integration.py) which exercise the same pipeline.
+- **Note:** `run_verification_tests` is tested indirectly through CLI `verify` command (Task 10.1: `test_cli_verify`) and by the AC integration tests themselves (test_integration.py) which exercise the same pipeline. This is by design — `run_verification_tests` is a thin orchestration wrapper that calls the real engine pipeline with known inputs; its correctness is validated by verifying that each AC passes, which is exactly what the integration tests and CLI verify command do.
 - **Done when:** `uv run python -c "from stock_backtester.simulation import run_verification_tests; r = run_verification_tests(42); assert len(r) == 8; assert all(v.passed for v in r)"` succeeds. Function returns 8 VerificationResult objects, all passing.
 - **Est:** ~10 min
 
@@ -385,6 +386,8 @@
   - `test_frontier_six_rows`: frontier section has 6 data rows
   - `test_simulation_report_ruin_rate`: ruin rate appears in simulation report
   - `test_verification_report_all_acs`: all AC names listed with PASS/FAIL
+  - `test_inf_sortino_table_display`: construct MetricsResult with `sortino=float('inf')` → TABLE output contains "inf" (not "nan" or error)
+  - `test_inf_sortino_json_display`: construct MetricsResult with `sortino=float('inf')` → JSON output contains `null` or `"Infinity"` (valid JSON — `json.dumps` cannot serialize `float('inf')` by default, so report.py must handle it)
 - **Done when:** All tests exist and fail.
 - **Est:** ~10 min
 
