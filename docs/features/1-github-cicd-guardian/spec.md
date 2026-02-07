@@ -24,7 +24,7 @@ The skill covers two features for initial delivery:
 | P0-1 | Fetch pipeline status | Given a repo with GitHub Actions, when the user asks about CI status, the skill runs `gh run list --limit 10` and presents a summary of recent runs with pass/fail status |
 | P0-2 | Fetch failure logs | Given a failing workflow run, when the user asks to diagnose it, the skill runs `gh run view {run-id} --log-failed` to retrieve only the failing step logs |
 | P0-3 | Root cause analysis | Given failure logs, the skill categorizes the failure and provides evidence. Test scenarios: (a) `ModuleNotFoundError: No module named 'foo'` → dependency issue; (b) `Error: .github/workflows/ci.yml: unexpected value` → YAML misconfiguration; (c) `FAIL test_order_placement ... AssertionError` → code bug; (d) `Error: Process completed with exit code 143` (timeout on re-run of same commit) → flaky test; (e) `No space left on device` or `runner is offline` → infrastructure/runner problem; (f) `Resource not accessible by integration` → permissions issue. The category MUST be stated explicitly in the output with the supporting log evidence quoted |
-| P0-4 | Propose fix | Given a root cause, the skill proposes a specific fix with explanation: a code diff, YAML change, dependency update, or retry recommendation |
+| P0-4 | Propose fix | Given a root cause, the skill proposes a specific fix with explanation. Output format: (1) plain-language explanation of why the fix addresses the root cause, (2) the specific change shown as a markdown code block (diff format for file edits, command format for retries/dependency updates), (3) what the user needs to approve before the skill applies it |
 | P0-5 | Apply fix with approval | Given a proposed fix, the skill presents the exact changes before applying them. Code/YAML changes require user confirmation before writing. Workflow re-triggers require explicit "yes, re-run" confirmation |
 | P0-6 | Handle ambiguous requests | Given "fix my CI" or "my pipeline is broken", the skill defaults to diagnosis only (P0-1 through P0-3) and asks before escalating to P0-4/P0-5 |
 
@@ -58,7 +58,7 @@ gh run rerun {run-id} --failed                 # Re-run only failed jobs
 |----|-------------|-------------------|
 | P1-1 | Scan for unpinned actions | Given `.github/workflows/*.yml` files, the skill identifies any `uses:` references that use tags (`@v1`, `@main`) instead of commit SHAs, and flags them as supply chain risks |
 | P1-2 | Check for excessive permissions | Given workflow files, the skill identifies workflows with `permissions: write-all` or no explicit `permissions:` block (which defaults to broad access), and recommends least-privilege permissions |
-| P1-3 | Detect hardcoded secrets | Given workflow files, the skill scans for patterns that look like hardcoded credentials (API keys, tokens, passwords) rather than `${{ secrets.* }}` references |
+| P1-3 | Detect hardcoded secrets | Given workflow files, the skill scans for hardcoded credential patterns rather than `${{ secrets.* }}` references. Detection approach: (1) Known format patterns -- AWS access keys (`AKIA[0-9A-Z]{16}`), GitHub PATs (`ghp_[A-Za-z0-9_]{36}`), generic tokens (`gh[pousr]_[A-Za-z0-9_]{36,}`); (2) YAML value patterns -- keys named `password`, `token`, `api_key`, `secret`, `credential` with inline string values instead of `${{ secrets.* }}`; (3) Claude's language understanding for credential-like strings not matching known formats. Each detection must cite the file, line, and matched pattern |
 | P1-4 | Check for template injection | Given workflow files, the skill identifies unsafe use of `${{ github.event.* }}` in `run:` blocks (which enables script injection via PR titles/branch names) |
 | P1-5 | Validate secrets usage | Given workflow files, the skill checks that secrets are referenced via `${{ secrets.* }}` and not exposed via `echo` to logs or passed to untrusted actions |
 | P1-6 | Known vulnerability check for actions | Given actions used in workflows, the skill checks for known vulnerabilities using a layered approach: (1) If `zizmor` is installed, run `zizmor --format json` which includes its own vulnerability database; (2) Query `gh api /repos/{owner}/{repo}/security-advisories` for the action's repository; (3) Fall back to Claude's training knowledge with explicit caveat: "Based on training data as of [date], may be outdated -- verify independently." The skill must NOT claim comprehensive CVE coverage since GitHub Advisory Database does not index GitHub Actions as an ecosystem |
@@ -88,20 +88,22 @@ zizmor --format json .github/workflows/        # Security scanning (if installed
 
 #### Security Anti-Patterns Checklist
 
-The skill must check for these specific patterns:
+The skill must check for these specific patterns. Items 1-4 map directly to P1-1 through P1-4. Items 5-8 are covered by the general security audit scope and included in the P1-7 security report output.
 
-1. **Unpinned actions**: `uses: actions/checkout@v4` instead of `uses: actions/checkout@{sha}`
-2. **Overly broad permissions**: `permissions: write-all` or missing `permissions:` block
-3. **Template injection**: `run: echo ${{ github.event.pull_request.title }}` (unsanitized)
-4. **Secret in echo**: `run: echo ${{ secrets.API_KEY }}` (logs to output)
-5. **Pull request target trigger**: `on: pull_request_target` with checkout of PR code (allows fork code execution)
-6. **Mutable action references**: Using `@main` or `@master` branch references
-7. **Missing CODEOWNERS**: No `.github/CODEOWNERS` for workflow files
-8. **Artifact exposure**: Uploading artifacts that may contain secrets
+1. **Unpinned actions**: `uses: actions/checkout@v4` instead of `uses: actions/checkout@{sha}` → P1-1
+2. **Overly broad permissions**: `permissions: write-all` or missing `permissions:` block → P1-2
+3. **Template injection**: `run: echo ${{ github.event.pull_request.title }}` (unsanitized) → P1-4
+4. **Secret in echo**: `run: echo ${{ secrets.API_KEY }}` (logs to output) → P1-5
+5. **Pull request target trigger**: `on: pull_request_target` with checkout of PR code (allows fork code execution) → P1-7
+6. **Mutable action references**: Using `@main` or `@master` branch references → P1-1 (subset)
+7. **Missing CODEOWNERS**: No `.github/CODEOWNERS` for workflow files → P1-7
+8. **Artifact exposure**: Uploading artifacts that may contain secrets → P1-7
 
 ## 3. V2 Scope (SHOULD HAVE)
 
-Defined here for completeness but NOT part of initial implementation.
+Defined here for completeness but NOT part of initial implementation. V2 features will be designed and specified separately. The MVP design does not need to include extension points for V2, but should not preclude V2 additions to `SKILL.md`.
+
+**V2 does NOT include**: P4 (Status Dashboard), P5 (Deployment Safety), P6 (Cost Optimization), cross-repository workflows, infrastructure-level operations, or any non-GitHub CI platforms.
 
 ### 3.1 P2: Workflow Authoring & Validation
 
@@ -119,15 +121,11 @@ Defined here for completeness but NOT part of initial implementation.
 | P3-2 | Validate separation of duties | Check if workflows enforce that PR author != merger (via required reviews) |
 | P3-3 | Generate readiness report | Output a checklist of compliance controls: configured, missing, and not-verifiable-by-tool |
 
-## 4. Future Scope (NICE TO HAVE)
-
-P4 (Status Dashboard), P5 (Deployment Safety), P6 (Cost Optimization) -- see PRD for details. Not specified here.
-
-## 5. Triaging Contract
+## 4. Triaging Contract
 
 This is the skill's core behavioral specification. The skill MUST follow these rules:
 
-### 5.1 Action Tiers
+### 4.1 Action Tiers
 
 | Tier | Actions | Confirmation Required |
 |------|---------|----------------------|
@@ -138,7 +136,7 @@ This is the skill's core behavioral specification. The skill MUST follow these r
 | **Tier 4: Execute** | `gh run rerun`, `gh workflow run` | Explicit confirmation with command shown |
 | **Tier 5: Destroy** | Delete workflow files | Double confirmation: show what will be deleted, then confirm |
 
-### 5.2 Ambiguity Resolution
+### 4.2 Ambiguity Resolution
 
 When intent is unclear, default to the **lowest applicable tier**:
 
@@ -148,7 +146,7 @@ When intent is unclear, default to the **lowest applicable tier**:
 - "Create a workflow" -> Tier 2 (propose), then ASK before Tier 3 (write)
 - "Delete the old workflow" -> Tier 2 (show what would be deleted), then ASK for Tier 5
 
-### 5.3 Escalation Pattern
+### 4.3 Escalation Pattern
 
 When the skill needs to escalate from read to write:
 
@@ -160,7 +158,7 @@ When the skill needs to escalate from read to write:
 5. Only then proceed to Tier 3+
 ```
 
-## 6. Skill File Structure
+## 5. Skill File Structure
 
 The deliverable is a single `SKILL.md` file inside `skills/github-cicd-guardian/`:
 
@@ -179,7 +177,7 @@ description: Diagnose GitHub Actions failures, audit workflow security, and fix 
 [gh CLI verification steps]
 
 ## Triaging Rules
-[The predictability contract from Section 5]
+[The predictability contract from Section 4]
 
 ## P0: Pipeline Failure Diagnosis
 [Step-by-step instructions for diagnosis workflow]
@@ -188,11 +186,12 @@ description: Diagnose GitHub Actions failures, audit workflow security, and fix 
 [Step-by-step instructions for security audit workflow]
 [Anti-patterns checklist]
 
-## P2: Workflow Authoring (V2)
-[Instructions for workflow generation and validation]
+<!-- V2 sections below are optional stubs in MVP. Include as placeholders or omit entirely. -->
+## P2: Workflow Authoring (V2 - not implemented)
+[Reserved for V2]
 
-## P3: Compliance Readiness (V2)
-[Instructions for compliance checking]
+## P3: Compliance Readiness (V2 - not implemented)
+[Reserved for V2]
 ```
 
 ### Frontmatter Constraints
@@ -200,7 +199,7 @@ description: Diagnose GitHub Actions failures, audit workflow security, and fix 
 - `description`: Must be under 200 characters. Used by Claude to decide when to auto-invoke the skill. The example above is 97 characters
 - No `description: |` multiline block -- keep it as a single-line string for reliable parsing
 
-## 7. Prerequisites
+## 6. Prerequisites
 
 | Prerequisite | Required | How to Verify |
 |-------------|----------|--------------|
@@ -210,7 +209,20 @@ description: Diagnose GitHub Actions failures, audit workflow security, and fix 
 | `actionlint` installed | No (optional) | `which actionlint` -- enhances P1/P2 validation if present |
 | `zizmor` installed | No (optional) | `which zizmor` -- enhances P1 security scanning if present |
 
-## 8. Error Handling
+### Required GitHub Token Scopes
+
+The `gh` CLI must be authenticated with a token that has these minimum scopes:
+
+| gh CLI Command | Required Scope | Used By |
+|---------------|---------------|---------|
+| `gh run list`, `gh run view` | `actions:read` | P0-1, P0-2 |
+| `gh run rerun` | `actions:write` | P0-5 (Tier 4, with confirmation) |
+| `gh secret list` | `admin:org` or repo admin | P1 (read-only, names only) |
+| `gh api /repos/{owner}/{repo}/security-advisories` | `security_events:read` | P1-6 |
+
+Note: `gh auth login` with default scopes (`repo`, `read:org`) covers most commands. `security_events:read` may need to be added explicitly for P1-6.
+
+## 7. Error Handling
 
 | Error Condition | Skill Behavior |
 |----------------|---------------|
@@ -221,20 +233,20 @@ description: Diagnose GitHub Actions failures, audit workflow security, and fix 
 | `gh api` rate limited | "GitHub API rate limit reached. Try again in [X] minutes." |
 | Network error | "Cannot reach GitHub API. Check your network connection." |
 
-## 9. Success Metrics
+## 8. Success Metrics
 
 These metrics define what "working correctly" means for the skill:
 
 | ID | Metric | Target | How to Verify |
 |----|--------|--------|---------------|
 | SM-1 | Diagnosis accuracy | Skill correctly categorizes failure type for common patterns (P0-3 test scenarios) | Manual test: inject each failure category into a workflow, verify skill categorizes correctly |
-| SM-2 | Time to diagnosis | User gets root cause analysis within a single interaction (no back-and-forth needed) | Manual test: ask "why is CI failing?" and verify skill completes P0-1 through P0-3 in one response |
+| SM-2 | Time to diagnosis | User gets root cause analysis (P0-1 through P0-3) within a single interaction -- no back-and-forth needed for diagnosis. Fix proposal (P0-4) and application (P0-5) may require additional confirmation steps per the triaging contract | Manual test: ask "why is CI failing?" and verify skill completes P0-1 through P0-3 in one response |
 | SM-3 | Security audit coverage | All 8 anti-patterns from checklist detected when present | Manual test: create a workflow with each anti-pattern, run audit, verify each is flagged |
 | SM-4 | Tier compliance | Skill never performs a Tier 3+ action without explicit user confirmation | Manual test: say "fix CI" and verify skill stops at Tier 2 (propose) and asks before writing |
-| SM-5 | Prerequisite handling | Skill detects missing `gh` CLI and provides clear error | Manual test: run in environment without `gh`, verify error message matches Section 8 |
+| SM-5 | Prerequisite handling | Skill detects missing `gh` CLI and provides clear error | Manual test: run in environment without `gh`, verify error message matches Section 7 |
 | SM-6 | Read-only audit | Security audit produces no file modifications | Manual test: run `git status` before and after audit, verify no changes |
 
-## 10. Out of Scope
+## 9. Out of Scope
 
 - Non-GitHub CI/CD platforms (Jenkins, GitLab CI, CircleCI, etc.)
 - Cross-repository pipeline dependencies
