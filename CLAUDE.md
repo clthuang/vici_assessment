@@ -19,6 +19,20 @@ subterminator/           # SubTerminator CLI project
   tests/                 # Test suite (unit + integration)
   docs/                  # Architecture, features, PRDs
   pyproject.toml         # Project config
+stock-backtester/        # Stock Backtester project
+  src/stock_backtester/  # Source code
+    types.py             # Dataclasses (BacktestConfig, SimulationConfig)
+    data.py              # Price data fetching (yfinance)
+    strategy.py          # Strategy definitions (equal-weight)
+    execution.py         # Transaction cost modeling
+    engine.py            # Vectorized backtesting engine
+    metrics.py           # Performance metrics (Sharpe, drawdown)
+    kelly.py             # Kelly criterion & ruin analysis
+    simulation.py        # Monte Carlo simulation
+    report.py            # Output formatting (table/JSON)
+    cli.py               # CLI entry point (Typer)
+  tests/                 # Test suite (88 tests, 93% coverage)
+  pyproject.toml         # Project config
 github-claude-skills/    # Claude Code skill plugin
   .claude-plugin/        # Plugin manifest (plugin.json)
   skills/                # Skill definitions

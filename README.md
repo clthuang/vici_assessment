@@ -10,7 +10,7 @@ The [VICI Claude Code 7-Day Challenge](subterminator/docs/prds/VICI%20Claude%20C
 | # | Task | Difficulty | Status |
 |---|------|------------|--------|
 | 4 | [SubTerminator (Browser Automation)](#task-4-subterminator-browser-automation) | Hard | Completed |
-| 1 | [US Stock Backtesting System](#task-1-us-stock-backtesting-system) | Easy | Not Started |
+| 1 | [US Stock Backtesting System](#task-1-us-stock-backtesting-system) | Easy | Completed |
 | 2 | [Claude CLI → LiteLLM Endpoint](#task-2-claude-cli--litellm-endpoint) | Medium | Completed |
 | 3 | [GitHub CI/CD → Claude Skills](#task-3-github-cicd--claude-skills) | Medium | Completed |
 
@@ -48,6 +48,14 @@ uv run subterminator cancel --service netflix --dry-run
 
 ---
 
+## Task 1: US Stock Backtesting System
+
+Statistical arbitrage backtesting system with Kelly criterion sizing and Monte Carlo simulation. Runs vectorized backtests over historical price data, computes risk-adjusted metrics, and estimates ruin probability.
+
+- **Product docs:** [stock-backtester/README.md](stock-backtester/README.md)
+
+---
+
 ## Task 3: GitHub CI/CD → Claude Skills
 
 Claude Code skill plugin that wraps GitHub CI/CD capabilities as AI-driven skills. The first skill, **GitHub CI/CD Guardian**, diagnoses pipeline failures and audits workflow security for GitHub Actions.
@@ -66,14 +74,6 @@ LiteLLM custom provider that wraps the Claude Agent SDK to expose a natural lang
 
 ---
 
-## Task 1: US Stock Backtesting System
-
-US stock backtesting system (美股回測系統) for evaluating trading strategies against historical market data.
-
-**Status:** Not Started
-
----
-
 ## Project Structure
 
 ```
@@ -81,6 +81,10 @@ subterminator/           # Task 4: Browser automation tool
   src/subterminator/     #   Source code
   tests/                 #   Test suite
   docs/                  #   Architecture, features, PRDs
+  pyproject.toml         #   Project config
+stock-backtester/        # Task 1: Statistical arbitrage backtester
+  src/stock_backtester/  #   Source code (10 modules)
+  tests/                 #   Test suite (88 tests, 93% coverage)
   pyproject.toml         #   Project config
 github-claude-skills/    # Task 3: Claude Code skill plugin
   .claude-plugin/        #   Plugin manifest
@@ -102,6 +106,12 @@ claude-litellm/          # Task 2: Claude-DA data analysis
 - [Typer](https://typer.tiangolo.com/) CLI framework
 - Claude API (LLM orchestration) via LangChain
 - [Playwright MCP](https://github.com/anthropics/mcp) for browser control
+
+### Stock Backtester
+- Python 3.12+, [uv](https://github.com/astral-sh/uv)
+- [Typer](https://typer.tiangolo.com/) CLI framework
+- pandas, numpy, scipy for vectorized computation
+- yfinance for historical price data
 
 ### Claude-DA
 - Python 3.11+, [uv](https://github.com/astral-sh/uv)
